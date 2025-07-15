@@ -282,7 +282,7 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
                   ))}
                 </div>
                 
-                {/* Zero Line (Middle) */}
+                {/* Zero Line (Middle) - Thicker and more visible */}
                 <div className="absolute top-1/2 left-0 right-0 border-t-2 border-gray-400 z-20"></div>
                 
                 {/* Vertical Grid Lines and Bars */}
@@ -308,7 +308,6 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
                         height: `${(Math.abs(data.sell) / 150) * 128}px`
                       }}
                     ></div>
-                    
                   </div>
                 ))}
                 </div>
@@ -419,9 +418,7 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
                           {tx.side}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-300">
-                        {formatAge(tx.timestamp)}
-                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{tx.date} {tx.time}</td>
                       <td className="px-4 py-3 text-sm font-mono text-white">{tx.marketcap}</td>
                       <td className="px-4 py-3 text-sm font-mono text-blue-400">
                         {tx.maker.slice(0, 8)}...{tx.maker.slice(-4)}

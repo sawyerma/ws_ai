@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Star, TrendingUp, TrendingDown, RefreshCw, Settings } from 'lucide-react';
+import { Search, RefreshCw, Settings } from 'lucide-react';
 import { getSymbols, ApiSymbol, clearCache } from '../../api/symbols';
 
 interface AdvancedCoinSelectorProps {
@@ -20,9 +20,6 @@ const AdvancedCoinSelector: React.FC<AdvancedCoinSelectorProps> = ({
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMarket, setSelectedMarket] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'symbol' | 'change' | 'volume'>('symbol');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // Load favorites from localStorage
@@ -70,12 +67,6 @@ const AdvancedCoinSelector: React.FC<AdvancedCoinSelectorProps> = ({
     loadSymbols();
   }, []);
 
-  // Get available markets
-  const availableMarkets = useMemo(() => {
-    const markets = new Set(symbols.map(s => s.market).filter(Boolean));
-    return ['all', ...Array.from(markets).sort()];
-  }, [symbols]);
-
   // Filter and sort symbols
   const filteredSymbols = useMemo(() => {
     let filtered = symbols;
@@ -87,11 +78,6 @@ const AdvancedCoinSelector: React.FC<AdvancedCoinSelectorProps> = ({
       );
     }
 
-    // Filter by market
-    if (selectedMarket !== 'all') {
-      filtered = filtered.filter(symbol => symbol.market === selectedMarket);
-    }
-
     // Sort symbols
     filtered.sort((a, b) => {
       // Favorites first
@@ -100,27 +86,16 @@ const AdvancedCoinSelector: React.FC<AdvancedCoinSelectorProps> = ({
       if (aFav && !bFav) return -1;
       if (!aFav && bFav) return 1;
 
-      // Then by selected sort
-      let comparison = 0;
-      switch (sortBy) {
-        case 'symbol':
-          comparison = a.symbol.localeCompare(b.symbol);
-          break;
-        case 'change':
-          comparison = a.changePercent - b.changePercent;
-          break;
-        default:
-          comparison = a.symbol.localeCompare(b.symbol);
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
+      // Then by symbol name
+      return a.symbol.localeCompare(b.symbol);
     });
 
     return filtered;
-  }, [symbols, searchTerm, selectedMarket, sortBy, sortOrder, favorites]);
+  }, [symbols, searchTerm, favorites]);
 
   // Toggle favorite
-  const toggleFavorite = (symbol: string) => {
+  const toggleFavorite = (symbol: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     const newFavorites = new Set(favorites);
     if (newFavorites.has(symbol)) {
       newFavorites.delete(symbol);
@@ -146,193 +121,150 @@ const AdvancedCoinSelector: React.FC<AdvancedCoinSelectorProps> = ({
       {/* Selected Symbol Display */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-w-[200px]"
+        className="flex items-center justify-between px-3 py-2 bg-[#111827] dark:bg-[#111827] border border-gray-700 dark:border-gray-700 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-800 transition-colors min-w-[150px]"
       >
-        <span className="font-medium text-gray-900 dark:text-white">
+        <span className="font-bold text-white dark:text-white text-sm">
           {displaySymbol}
         </span>
-        {favorites.has(displaySymbol) && (
-          <Star size={16} className="text-yellow-500 fill-current" />
-        )}
         <svg
-          className={`w-4 h-4 ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-3 h-3 ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
         </svg>
       </button>
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-50">
-          {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                Select Symbol
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadSymbols(true)}
-                  disabled={loading}
-                  className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50"
-                  title="Refresh symbols"
-                >
-                  <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                </button>
-                {onSettingsClick && (
-                  <button
-                    onClick={onSettingsClick}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                    title="Settings"
-                  >
-                    <Settings size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="relative mb-3">
-              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <div className="absolute top-full left-0 mt-1 bg-[#1e2433] dark:bg-[#1e2433] border border-gray-700 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden w-[377px]">
+          {/* Search */}
+          <div className="p-2 border-b border-gray-700">
+            <div className="relative">
+              <Search size={12} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search symbols..."
+                placeholder="Search symbols"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 text-xs border border-gray-600 rounded-lg bg-[#111827] text-white placeholder-gray-500 focus:outline-none"
               />
             </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-3 text-sm">
-              <select
-                value={selectedMarket}
-                onChange={(e) => setSelectedMarket(e.target.value)}
-                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                {availableMarkets.map(market => (
-                  <option key={market} value={market}>
-                    {market === 'all' ? 'All Markets' : (market || '').toUpperCase()}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="symbol">Symbol</option>
-                <option value="change">Change</option>
-              </select>
-
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600"
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
           </div>
 
-          {/* Error State */}
-          {error && (
-            <div className="p-4 text-red-600 dark:text-red-400 text-sm">
-              {error}
-              <button
-                onClick={() => loadSymbols(true)}
-                className="ml-2 underline hover:no-underline"
-              >
-                Retry
-              </button>
+          {/* Header Row */}
+          <div className="flex items-center px-3 py-2 bg-[#1e2433] border-b border-gray-700 text-gray-400 text-xs">
+            <div className="flex items-center w-[130px]">
+              <span className="text-yellow-500 mr-2 text-xs">★</span>
+              <span className="text-xs">COIN</span>
+              <span className="ml-1">↑</span>
             </div>
-          )}
+            <div className="w-[110px] text-right text-xs">PRICE</div>
+            <div className="w-[90px] text-right text-xs">24H</div>
+            <div className="w-[35px] text-center text-xs">L</div>
+            <div className="w-[12px] text-center text-xs">H</div>
+          </div>
 
-          {/* Loading State */}
-          {loading && (
-            <div className="p-4 text-gray-500 dark:text-gray-400 text-sm flex items-center gap-2">
-              <RefreshCw size={16} className="animate-spin" />
-              Loading symbols...
-            </div>
-          )}
-
-          {/* Symbol List */}
-          {!loading && !error && (
-            <div className="max-h-96 overflow-y-auto">
-              {filteredSymbols.length === 0 ? (
-                <div className="p-4 text-gray-500 dark:text-gray-400 text-sm text-center">
-                  No symbols found
-                </div>
-              ) : (
-                <div className="p-2">
-                  {filteredSymbols.map((symbol) => (
-                    <div
-                      key={`${symbol.symbol}_${symbol.market}`}
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer group"
-                      onClick={() => handleSymbolSelect(symbol)}
+          {/* Coins list */}
+          <div className="max-h-[300px] overflow-y-auto">
+            {loading ? (
+              <div className="p-4 text-center text-gray-400">
+                <RefreshCw size={12} className="animate-spin mx-auto mb-2" />
+                <span className="text-xs">Loading...</span>
+              </div>
+            ) : filteredSymbols.length > 0 ? (
+              filteredSymbols.map((coin) => (
+                <div
+                  key={`${coin.symbol}_${coin.market}`}
+                  className={`flex items-center px-3 py-2 cursor-pointer transition-colors border-b border-gray-700 ${
+                    coin.symbol === displaySymbol
+                      ? "bg-[#1a2035]"
+                      : "hover:bg-[#1a2035]"
+                  }`}
+                  onClick={() => handleSymbolSelect(coin)}
+                >
+                  <div className="flex items-center w-[130px]">
+                    <span
+                      className={`text-sm mr-2 ${
+                        favorites.has(coin.symbol) ? "text-yellow-500" : "text-gray-600"
+                      }`}
+                      onClick={(e) => toggleFavorite(coin.symbol, e)}
                     >
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(symbol.symbol);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Star
-                            size={16}
-                            className={`${
-                              favorites.has(symbol.symbol)
-                                ? 'text-yellow-500 fill-current'
-                                : 'text-gray-400 hover:text-yellow-500'
-                            }`}
-                          />
-                        </button>
-
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              {symbol.symbol}
-                            </span>
-                            <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded">
-                              {symbol.market}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            ${symbol.price}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className={`text-sm font-medium ${
-                          symbol.changePercent >= 0 
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-red-600 dark:text-red-400'
-                        }`}>
-                          {symbol.changePercent >= 0 ? (
-                            <TrendingUp size={14} className="inline mr-1" />
-                          ) : (
-                            <TrendingDown size={14} className="inline mr-1" />
-                          )}
-                          {symbol.change}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      ★
+                    </span>
+                    <span className="font-bold text-white text-sm">{coin.symbol}</span>
+                  </div>
+                  <div className="w-[110px] text-right font-mono text-white text-sm">
+                    {coin.price}
+                  </div>
+                  <div
+                    className={`w-[90px] text-right font-bold text-sm ${
+                      (coin.changePercent || 0) >= 0 ? "text-green-500" : "text-red-500"
+                    }`}
+                  >
+                    {coin.change}
+                  </div>
+                  <div className="w-[35px] text-center">
+                    <span
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{
+                        backgroundColor: "rgb(34, 197, 94)"
+                      }}
+                    ></span>
+                  </div>
+                  <div className="w-[12px] text-center">
+                    <span
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{
+                        backgroundColor: coin.market === "spot" ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"
+                      }}
+                    ></span>
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+              ))
+            ) : (
+              <div className="p-4 text-center text-gray-400">
+                <span className="text-xs">No symbols found</span>
+              </div>
+            )}
+          </div>
 
           {/* Footer */}
-          <div className="p-3 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-            {filteredSymbols.length} symbols • Updated every 10 seconds
+          <div className="p-1.5 border-t border-gray-700 text-xs text-gray-400 flex justify-between items-center">
+            <div>
+              <span className="text-[10px]">{filteredSymbols.length} symbols</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadSymbols(true)}
+                disabled={loading}
+                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-50"
+                title="Refresh symbols"
+              >
+                <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
+              </button>
+              {onSettingsClick && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSettingsClick();
+                    setIsOpen(false);
+                  }}
+                  className="p-0.5 text-gray-400 hover:text-white"
+                  title="Settings"
+                >
+                  <Settings size={10} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Overlay to close dropdown when clicking outside */}
+      {isOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
       )}
     </div>
   );

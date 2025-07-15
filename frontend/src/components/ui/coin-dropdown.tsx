@@ -129,4 +129,3 @@ const CoinDropdown = () => {
 };
 
 export default CoinDropdown;
-

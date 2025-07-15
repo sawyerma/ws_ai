@@ -244,88 +244,92 @@ const CoinSelector = ({
               </div>
             )}
 
-            {/* Coins grouped by market */}
-            {!loading && Object.entries(groupedCoins).map(([market, marketCoins]) => (
-              <div key={market}>
-                {/* Market Header - nur anzeigen wenn mehr als ein Markt */}
-                {Object.keys(groupedCoins).length > 1 && (
-                  <div className="px-4 py-2 font-bold bg-[#f3f7ff] dark:bg-gray-700 text-[#357] dark:text-[#fff] uppercase text-xs">
-                    {market.toUpperCase()}
-                  </div>
-                )}
-                
-                {/* Coins for this market */}
-                {marketCoins.map((coin) => (
-                  <div
-                    key={coin.id}
-                    className={`flex items-center px-4 h-[36px] font-sans text-[10px] cursor-pointer transition-all duration-200 border-b border-gray-100 dark:border-gray-700 last:border-b-0 ${
-                      coin.symbol === selectedCoin
-                        ? "bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 shadow-sm"
-                        : "hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 dark:hover:from-gray-700 dark:hover:to-gray-600"
+            {/* Header Row */}
+            <div className="flex items-center px-4 py-2 bg-gray-800 dark:bg-gray-800 border-b border-gray-700">
+              <div className="w-[40px] text-center">
+                <span className="text-yellow-500">★</span>
+              </div>
+              <div className="w-[120px] font-bold text-xs text-gray-300 uppercase">
+                COIN <span className="ml-1">↑</span>
+              </div>
+              <div className="w-[120px] text-right font-bold text-xs text-gray-300 uppercase">
+                PRICE
+              </div>
+              <div className="w-[100px] text-right font-bold text-xs text-gray-300 uppercase">
+                24H
+              </div>
+              <div className="w-[40px] text-center font-bold text-xs text-gray-300 uppercase">
+                L
+              </div>
+              <div className="w-[40px] text-center font-bold text-xs text-gray-300 uppercase">
+                H
+              </div>
+            </div>
+
+            {/* Coins list */}
+            {!loading && filteredCoins.map((coin) => (
+              <div
+                key={coin.id}
+                className={`flex items-center px-4 h-[50px] font-sans cursor-pointer transition-all duration-200 border-b border-gray-700 ${
+                  coin.symbol === selectedCoin
+                    ? "bg-gray-700"
+                    : "hover:bg-gray-700"
+                }`}
+                onClick={() => handleCoinSelect(coin)}
+              >
+                <div className="w-[40px] text-center">
+                  <span
+                    className={`text-lg cursor-pointer hover:scale-125 transition-transform duration-200 ${
+                      coin.isFavorite
+                        ? "text-yellow-500"
+                        : "text-gray-500"
                     }`}
-                    onClick={() => handleCoinSelect(coin)}
+                    onClick={(e) => toggleFavorite(coin.id, e)}
                   >
-                    <div className="w-[28px] text-center">
-                      <span
-                        className={`text-[10px] cursor-pointer hover:scale-125 transition-transform duration-200 ${
-                          coin.isFavorite
-                            ? "text-yellow-500"
-                            : "text-gray-300 dark:text-gray-600"
-                        }`}
-                        onClick={(e) => toggleFavorite(coin.id, e)}
-                      >
-                        ★
-                      </span>
-                    </div>
-                    <div className="w-[80px] font-bold text-[10px] dark:text-white truncate">
-                      {coin.symbol}
-                    </div>
-                    <div className="w-[80px] text-right font-semibold text-[10px] dark:text-gray-200">
-                      {coin.price}
-                    </div>
-                    <div
-                      className={`w-[70px] text-right font-bold text-[10px] ml-4 ${
-                        (coin.changePercent ?? 0) >= 0
-                          ? "text-emerald-500"
-                          : "text-red-500"
-                      }`}
-                    >
-                      {coin.change}
-                    </div>
-                    <div className="w-[30px] text-center">
-                      {showLiveStatus && (
-                        <span
-                          className="inline-block rounded-full shadow-sm"
-                          style={{
-                            width: "8px",
-                            height: "8px",
-                            backgroundColor:
-                              coin.liveStatus === "green"
-                                ? "rgba(16, 185, 129, 0.9)"
-                                : "rgba(239, 68, 68, 0.9)",
-                            border: "none",
-                          }}
-                        ></span>
-                      )}
-                    </div>
-                    <div className="w-[30px] text-center">
-                      {showHistStatus && (
-                        <span
-                          className="inline-block rounded-full shadow-sm"
-                          style={{
-                            width: "8px",
-                            height: "8px",
-                            backgroundColor:
-                              coin.histStatus === "green"
-                                ? "rgba(16, 185, 129, 0.9)"
-                                : "rgba(239, 68, 68, 0.9)",
-                            border: "none",
-                          }}
-                        ></span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                    ★
+                  </span>
+                </div>
+                <div className="w-[120px] font-bold text-sm text-white">
+                  {coin.symbol}
+                </div>
+                <div className="w-[120px] text-right font-semibold text-sm text-white">
+                  {coin.price}
+                </div>
+                <div
+                  className={`w-[100px] text-right font-bold text-sm ${
+                    (coin.changePercent ?? 0) >= 0
+                      ? "text-green-500"
+                      : "text-red-500"
+                  }`}
+                >
+                  {coin.change}
+                </div>
+                <div className="w-[40px] text-center">
+                  <span
+                    className="inline-block rounded-full"
+                    style={{
+                      width: "12px",
+                      height: "12px",
+                      backgroundColor:
+                        coin.liveStatus === "green"
+                          ? "rgba(16, 185, 129, 0.9)"
+                          : "rgba(239, 68, 68, 0.9)",
+                    }}
+                  ></span>
+                </div>
+                <div className="w-[40px] text-center">
+                  <span
+                    className="inline-block rounded-full"
+                    style={{
+                      width: "12px",
+                      height: "12px",
+                      backgroundColor:
+                        coin.histStatus === "green"
+                          ? "rgba(16, 185, 129, 0.9)"
+                          : "rgba(239, 68, 68, 0.9)",
+                    }}
+                  ></span>
+                </div>
               </div>
             ))}
 
