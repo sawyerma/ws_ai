@@ -9,7 +9,7 @@ This document describes the **Trading API**â€”backed by a Bitget data pipelineâ€
 5. **Usage Examples**
 6. **Core Router Mapping**
 
----
+
 
 ## 1. Base URLs & Environment
 

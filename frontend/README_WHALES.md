@@ -23,6 +23,8 @@ GET /api/whale-transactions
 GET /api/whale-chart-data
 ```
 
+
+
 **Query Parameter:**
 - `timeframe` - Zeitfilter (1h, 6h, 24h, 7d)
 - `interval` - Chart-Intervall (1h, 4h, etc.)
