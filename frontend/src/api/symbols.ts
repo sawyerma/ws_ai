@@ -37,7 +37,7 @@ interface BackendSymbolsResponse {
 }
 
 // Configuration
-const API_BASE = 'http://localhost:8100';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8100';
 const CACHE_TTL = 300000; // 5 minutes for symbols
 const TICKER_CACHE_TTL = 10000; // 10 seconds for tickers
 

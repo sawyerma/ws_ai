@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 export default function MarketTrades({
   symbol = "BTCUSDT",
   market = "spot",
-  wsBase = "ws://localhost:8100",   // ggf. anpassen
+  wsBase,
   maxLength = 30
 }) {
   const [trades, setTrades] = useState([]);
@@ -11,7 +11,8 @@ export default function MarketTrades({
   const wsRef = useRef(null);
 
   useEffect(() => {
-    const wsUrl = `${wsBase}/ws/${symbol}/${market}/trades`;
+    const wsBaseUrl = wsBase || import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8100';
+    const wsUrl = `${wsBaseUrl}/ws/${symbol}/${market}/trades`;
     setWsStatus("connecting");
     const ws = new window.WebSocket(wsUrl);
     wsRef.current = ws;

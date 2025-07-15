@@ -111,7 +111,8 @@ const Orderbook = ({
     const { symbol, market } = getSymbolAndMarket();
     
     // Connect to trades WebSocket
-    const wsUrl = `ws://localhost:8100/ws/${symbol}/${market}/trades`;
+    const wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8100';
+    const wsUrl = `${wsBaseUrl}/ws/${symbol}/${market}/trades`;
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {

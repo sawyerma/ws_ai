@@ -6,7 +6,7 @@ import { useMemoizedAggregations } from "../hooks/use-memoized-calculations";
 // ACHTUNG:     KEIN ESM-IMPORT! window.LightweightCharts kommt aus <script> in index.html
 
 export default function ChartView({
-  wsUrl = "ws://localhost:8100/ws/BTCUSDT/spot", // Default-WS, anpassbar - FIXED: Port 8100
+  wsUrl,
   width = 800,
   height = 400,
   symbol = "BTCUSDT",
@@ -344,7 +344,7 @@ export default function ChartView({
       console.log(`[ChartView] Loading historical data: ${symbol}, resolution: ${resolution}, limit: ${limit}`);
       
       // API-Call für historische Candles - PASSEND ZU DEINEM BACKEND
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8100';
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8100';
       const response = await fetch(`${apiUrl}/ohlc?symbol=${symbol}&resolution=${resolution}&limit=${limit}`);
       
       if (response.ok) {
@@ -594,12 +594,13 @@ export default function ChartView({
 
     // WebSocket verbinden - PASSEND ZU DEINEM BACKEND
     setWsStatus("connecting");
-    const wsUrl = 'ws://localhost:8100'; // Forced localhost for browser access
-    const ws = new window.WebSocket(`${wsUrl}/ws/${symbol}`);
+    const wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8100';
+    const wsEndpoint = wsUrl || `${wsBaseUrl}/ws/${symbol}/${market}`;
+    const ws = new window.WebSocket(wsEndpoint);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("[ChartView] WebSocket verbunden:", `${wsUrl}/ws/${symbol}`);
+      console.log("[ChartView] WebSocket verbunden:", wsEndpoint);
       setWsStatus("connected");
     };
 
