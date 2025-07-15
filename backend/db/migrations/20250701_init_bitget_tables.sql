@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS coin_settings (
 ENGINE = MergeTree()
 ORDER BY (symbol, market);
 
+
 -- Table: trades
 CREATE TABLE IF NOT EXISTS trades (
     symbol   String,
