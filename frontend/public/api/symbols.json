@@ -1,0 +1,88 @@
+{
+  "symbols": [
+    {
+      "symbol": "BTC/USDT",
+      "market": "spot",
+      "price": "104,911.62",
+      "change": "-3.56%",
+      "changePercent": -3.56
+    },
+    {
+      "symbol": "ETH/USDT",
+      "market": "spot",
+      "price": "3,252.10",
+      "change": "+1.20%",
+      "changePercent": 1.2
+    },
+    {
+      "symbol": "SOL/USDT",
+      "market": "spot",
+      "price": "134.51",
+      "change": "+0.30%",
+      "changePercent": 0.3
+    },
+    {
+      "symbol": "ADA/USDT",
+      "market": "spot",
+      "price": "0.8945",
+      "change": "+2.15%",
+      "changePercent": 2.15
+    },
+    {
+      "symbol": "DOT/USDT",
+      "market": "spot",
+      "price": "7.23",
+      "change": "-1.05%",
+      "changePercent": -1.05
+    },
+    {
+      "symbol": "BTC/USDT",
+      "market": "usdt-m",
+      "price": "104,420.00",
+      "change": "-0.18%",
+      "changePercent": -0.18
+    },
+    {
+      "symbol": "ETH/USDT",
+      "market": "usdt-m",
+      "price": "3,240.50",
+      "change": "+0.85%",
+      "changePercent": 0.85
+    },
+    {
+      "symbol": "SOL/USDT",
+      "market": "usdt-m",
+      "price": "133.75",
+      "change": "+0.12%",
+      "changePercent": 0.12
+    },
+    {
+      "symbol": "BTC/USD",
+      "market": "coin-m-perp",
+      "price": "104,350.00",
+      "change": "-0.25%",
+      "changePercent": -0.25
+    },
+    {
+      "symbol": "ETH/USD",
+      "market": "coin-m-perp",
+      "price": "3,235.80",
+      "change": "+0.45%",
+      "changePercent": 0.45
+    },
+    {
+      "symbol": "BTC/USDC",
+      "market": "usdc-m",
+      "price": "104,380.25",
+      "change": "-0.12%",
+      "changePercent": -0.12
+    },
+    {
+      "symbol": "ETH/USDC",
+      "market": "usdc-m",
+      "price": "3,248.90",
+      "change": "+0.78%",
+      "changePercent": 0.78
+    }
+  ]
+}

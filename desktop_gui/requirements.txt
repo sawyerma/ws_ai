@@ -1,0 +1,14 @@
+# DarkMa Trading Desktop UI Requirements
+PySide6>=6.8.0
+requests>=2.31.0
+websocket-client>=1.6.0
+psutil>=5.9.0
+matplotlib>=3.8.0
+pyqtgraph>=0.13.0
+darkdetect>=0.8.0
+plyer>=2.1.0
+keyring>=24.0.0
+cryptography>=42.0.0
+qasync>=0.25.0
+aiohttp>=3.9.0
+pydantic>=2.5.0

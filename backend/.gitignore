@@ -1,0 +1,18 @@
+# Python/Venv
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# VS Code
+.vscode/
+
+# Datenbanken, Dumps
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Docker Volumes/Datenbanken
+/var/lib/clickhouse/
+clickhouse-data/
