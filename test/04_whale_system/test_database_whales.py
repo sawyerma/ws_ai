@@ -7,10 +7,10 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta
 from db.clickhouse_whales import (
-    get_clickhouse_client, 
+    get_whale_client, 
     insert_whale_event, 
     is_duplicate, 
-    get_whale_events
+    fetch_whale_events
 )
 from whales.config_whales import Config
 
@@ -19,7 +19,7 @@ class TestDatabaseWhales:
     @pytest.fixture
     def clickhouse_client(self):
         """Get ClickHouse client for testing"""
-        return get_clickhouse_client()
+        return get_whale_client()
     
     @pytest.fixture
     def sample_whale_event(self):
@@ -84,7 +84,7 @@ class TestDatabaseWhales:
             await insert_whale_event(sample_whale_event)
             
             # Retrieve events
-            events = await get_whale_events(limit=10)
+            events = fetch_whale_events(limit=10)
             assert isinstance(events, list)
             assert len(events) >= 1
             

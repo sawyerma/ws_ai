@@ -52,6 +52,16 @@ class BlockchainCollector:
         self.running = False
         self.session = None
         self.native_symbol = self.chain_config["native_symbol"]
+        
+        # Backfill-State (minimal)
+        self.api_requests_today = 0
+        self.backfill_block = 0  # Aktueller Backfill-Block
+        self.backfill_direction = -1  # -1 = rückwärts, 1 = vorwärts
+        
+        # Intelligente API-Call-Zählung
+        self.daily_api_calls = 0
+        self.last_reset_day = datetime.now().day
+        self.last_reset_hour = datetime.now().hour
     
     async def start(self):
         self.running = True
@@ -69,17 +79,109 @@ class BlockchainCollector:
     async def run(self):
         while self.running:
             try:
-                current_block = await self.get_latest_block()
+                # Prüfe tägliches API-Reset um Mitternacht
+                await self.check_daily_reset()
                 
+                current_block = await self.get_latest_block()
+                current_hour = datetime.now().hour
+                
+                # 1. LIVE-DATEN VERARBEITEN (immer höchste Priorität)
                 if current_block > self.last_block:
                     for block_num in range(self.last_block + 1, current_block + 1):
                         await self.process_block(block_num)
+                        self.daily_api_calls += 1
                     self.last_block = current_block
+                
+                # 2. INTELLIGENTE BACKFILL-LOGIK
+                if Config.BACKFILL_ENABLED:
+                    # Initialisiere Backfill-Start bei erstem Lauf
+                    if self.backfill_block == 0:
+                        self.backfill_block = current_block - Config.BACKFILL_BATCH_SIZE
+                    
+                    # Berechne verfügbare API-Calls für Backfill
+                    remaining_calls = max(0, Config.DAILY_API_LIMIT - self.daily_api_calls)
+                    
+                    if current_hour == Config.NIGHT_BACKFILL_HOUR:
+                        # 23:00 UHR: INTENSIVE BACKFILL-STUNDE
+                        backfill_calls = max(0, remaining_calls - Config.LIVE_WHALE_SAFETY_BUFFER)
+                        if backfill_calls > 0:
+                            logger.info(f"🌙 Nächtliche Intensiv-Backfill gestartet: {backfill_calls} API-Calls verfügbar")
+                            await self.intensive_backfill(backfill_calls)
+                    else:
+                        # TAGSÜBER: Minimaler Backfill wenn viel Budget übrig
+                        if remaining_calls > (Config.DAILY_API_LIMIT * 0.8):  # Mehr als 80% übrig
+                            await self.process_block(self.backfill_block, is_backfill=True)
+                            self.daily_api_calls += 1
+                            self.backfill_block -= 1
+                            
+                            # Log alle 1000 Blöcke
+                            if self.backfill_block % 1000 == 0:
+                                logger.info(f"🔄 Backfill {self.chain}: Block {self.backfill_block}")
                 
                 await asyncio.sleep(10 if self.chain == "ethereum" else 15)
             except Exception as e:
                 logger.error(f"Run loop error: {e}")
                 await asyncio.sleep(30)
+    
+    async def check_daily_reset(self):
+        """Prüfe und führe tägliches API-Reset durch"""
+        now = datetime.now()
+        
+        # Reset um Mitternacht
+        if now.day != self.last_reset_day:
+            old_calls = self.daily_api_calls
+            self.daily_api_calls = 0
+            self.last_reset_day = now.day
+            logger.info(f"🔄 Tägliches API-Reset: {old_calls} → 0 (Neuer Tag)")
+    
+    async def intensive_backfill(self, available_calls: int):
+        """Intensive Backfill-Session zwischen 23:00-24:00"""
+        try:
+            backfill_count = 0
+            start_time = datetime.now()
+            
+            while (backfill_count < available_calls and 
+                   datetime.now().hour == Config.NIGHT_BACKFILL_HOUR and 
+                   self.running):
+                
+                # Prüfe ob 2017-Ziel erreicht wurde
+                if self.backfill_block <= Config.BACKFILL_TARGET_BLOCK_2017:
+                    logger.warning(f"🎉🎉🎉 MEILENSTEIN ERREICHT! 🎉🎉🎉")
+                    logger.warning(f"🏆 {self.chain.upper()} BACKFILL KOMPLETT BIS 2017!")
+                    logger.warning(f"🕐 Block {self.backfill_block:,} erreicht (Ziel: {Config.BACKFILL_TARGET_BLOCK_2017:,})")
+                    logger.warning(f"📅 Alle Whale-Transaktionen seit 2017 sind nun gesammelt!")
+                    logger.warning(f"⏱️ Gesamtzeit: {(datetime.now() - start_time).total_seconds():.1f}s")
+                    break
+                
+                # Verarbeite historischen Block
+                await self.process_block(self.backfill_block, is_backfill=True)
+                self.daily_api_calls += 1
+                self.backfill_block -= 1
+                backfill_count += 1
+                
+                # Log alle 100 Blöcke während Intensiv-Session
+                if backfill_count % 100 == 0:
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    rate = backfill_count / elapsed if elapsed > 0 else 0
+                    remaining_blocks = self.backfill_block - Config.BACKFILL_TARGET_BLOCK_2017
+                    logger.info(f"🚀 Intensiv-Backfill: {backfill_count}/{available_calls} ({rate:.1f} blocks/s)")
+                    logger.info(f"📊 Noch {remaining_blocks:,} Blöcke bis 2017-Ziel")
+                
+                # Kurze Pause um API nicht zu überlasten
+                await asyncio.sleep(0.2)
+            
+            # Finale Statistik
+            total_time = (datetime.now() - start_time).total_seconds()
+            remaining_blocks = max(0, self.backfill_block - Config.BACKFILL_TARGET_BLOCK_2017)
+            
+            if remaining_blocks == 0:
+                logger.warning(f"🎊 {self.chain.upper()} BACKFILL VOLLSTÄNDIG ABGESCHLOSSEN! 🎊")
+            else:
+                logger.info(f"✅ Nächtliche Backfill-Session beendet: {backfill_count} Blöcke in {total_time:.1f}s")
+                logger.info(f"📈 Fortschritt: Noch {remaining_blocks:,} Blöcke bis 2017")
+            
+        except Exception as e:
+            logger.error(f"Intensive Backfill Fehler: {e}")
 
     async def get_latest_block(self) -> int:
         try:
@@ -91,7 +193,7 @@ class BlockchainCollector:
             logger.error(f"Blocknummernfehler: {e}")
             return self.last_block
 
-    async def process_block(self, block_number: int):
+    async def process_block(self, block_number: int, is_backfill: bool = False):
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -109,7 +211,7 @@ class BlockchainCollector:
                     
                     # Verarbeite Transaktionen parallel
                     await asyncio.gather(*[
-                        self.process_transaction(tx)
+                        self.process_transaction(tx, is_backfill)
                         for tx in transactions
                         if self.is_whale_transaction(tx)
                     ])
@@ -127,7 +229,7 @@ class BlockchainCollector:
         # Filtere nur Transaktionen mit Wert
         return tx.get("input") == "0x" and tx.get("value") != "0x0"
     
-    async def process_transaction(self, tx: dict):
+    async def process_transaction(self, tx: dict, is_backfill: bool = False):
         try:
             if await is_duplicate(tx["hash"], self.chain):
                 return
@@ -174,7 +276,11 @@ class BlockchainCollector:
                 "to_city": to_location.get("city", "Unknown"),
                 "is_cross_border": int(is_cross_border),
                 "threshold_usd": threshold,
-                "coin_rank": coin_config.get("priority", 3)
+                "coin_rank": coin_config.get("priority", 3),
+                
+                # Backfill-Metadaten (minimal)
+                "backfill_block": self.backfill_block if is_backfill else 0,
+                "is_backfill": int(is_backfill)
             }
             
             if await insert_whale_event(event):

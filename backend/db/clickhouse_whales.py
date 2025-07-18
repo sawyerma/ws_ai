@@ -57,12 +57,13 @@ async def insert_whale_event(event: Dict[str, Any]) -> bool:
         INSERT INTO whale_events
         (ts, chain, tx_hash, from_addr, to_addr, token, symbol, amount, is_native, exchange, 
          amount_usd, from_exchange, from_country, from_city, to_exchange, to_country, to_city, 
-         is_cross_border, threshold_usd, coin_rank, source, created_at)
+         is_cross_border, threshold_usd, coin_rank, source, created_at, backfill_block, is_backfill)
         VALUES
         (%(ts)s, %(chain)s, %(tx_hash)s, %(from_addr)s, %(to_addr)s, %(token)s, %(symbol)s, 
          %(amount)s, %(is_native)s, %(exchange)s, %(amount_usd)s, %(from_exchange)s, 
          %(from_country)s, %(from_city)s, %(to_exchange)s, %(to_country)s, %(to_city)s, 
-         %(is_cross_border)s, %(threshold_usd)s, %(coin_rank)s, %(source)s, %(created_at)s)
+         %(is_cross_border)s, %(threshold_usd)s, %(coin_rank)s, %(source)s, %(created_at)s, 
+         %(backfill_block)s, %(is_backfill)s)
         """
         
         # Bereite Parameter vor
@@ -88,7 +89,11 @@ async def insert_whale_event(event: Dict[str, Any]) -> bool:
             "threshold_usd": event.get("threshold_usd", 0.0),
             "coin_rank": event.get("coin_rank", 3),
             "source": event.get("source", "direct_collector"),
-            "created_at": datetime.now()
+            "created_at": datetime.now(),
+            
+            # Backfill-Felder
+            "backfill_block": event.get("backfill_block", 0),
+            "is_backfill": event.get("is_backfill", 0)
         }
         
         client.command(sql, params)

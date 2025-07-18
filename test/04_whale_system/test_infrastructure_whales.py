@@ -5,49 +5,43 @@ Tests ClickHouse connection, table existence, and schema validation
 import pytest
 import asyncio
 import os
-from db.clickhouse_whales import get_clickhouse_client
 from whales.config_whales import Config
 
 class TestInfrastructure:
     
-    @pytest.fixture
-    def clickhouse_client(self):
-        """Get ClickHouse client for testing"""
-        return get_clickhouse_client()
-    
-    def test_clickhouse_connection(self, clickhouse_client):
+    def test_clickhouse_connection(self, whale_client):
         """Test ClickHouse database connection"""
         try:
-            result = clickhouse_client.query("SELECT 1")
+            result = whale_client.query("SELECT 1")
             assert result.result_rows[0][0] == 1
             print("✅ ClickHouse connection successful")
         except Exception as e:
             pytest.fail(f"❌ ClickHouse connection failed: {e}")
     
-    def test_whale_events_table_exists(self, clickhouse_client):
+    def test_whale_events_table_exists(self, whale_client):
         """Test whale_events table exists"""
         try:
-            result = clickhouse_client.query("SHOW TABLES FROM bitget LIKE 'whale_events'")
+            result = whale_client.query("SHOW TABLES FROM bitget LIKE 'whale_events'")
             assert len(result.result_rows) == 1
             assert result.result_rows[0][0] == 'whale_events'
             print("✅ whale_events table exists")
         except Exception as e:
             pytest.fail(f"❌ whale_events table check failed: {e}")
     
-    def test_coin_config_table_exists(self, clickhouse_client):
+    def test_coin_config_table_exists(self, whale_client):
         """Test coin_config table exists"""
         try:
-            result = clickhouse_client.query("SHOW TABLES FROM bitget LIKE 'coin_config'")
+            result = whale_client.query("SHOW TABLES FROM bitget LIKE 'coin_config'")
             assert len(result.result_rows) == 1
             assert result.result_rows[0][0] == 'coin_config'
             print("✅ coin_config table exists")
         except Exception as e:
             pytest.fail(f"❌ coin_config table check failed: {e}")
     
-    def test_whale_events_schema(self, clickhouse_client):
+    def test_whale_events_schema(self, whale_client):
         """Test whale_events table schema"""
         try:
-            result = clickhouse_client.query("DESCRIBE bitget.whale_events")
+            result = whale_client.query("DESCRIBE bitget.whale_events")
             columns = [row[0] for row in result.result_rows]
             
             required_columns = [
@@ -65,10 +59,10 @@ class TestInfrastructure:
         except Exception as e:
             pytest.fail(f"❌ whale_events schema validation failed: {e}")
     
-    def test_coin_config_schema(self, clickhouse_client):
+    def test_coin_config_schema(self, whale_client):
         """Test coin_config table schema"""
         try:
-            result = clickhouse_client.query("DESCRIBE bitget.coin_config")
+            result = whale_client.query("DESCRIBE bitget.coin_config")
             columns = [row[0] for row in result.result_rows]
             
             required_columns = [
@@ -83,17 +77,17 @@ class TestInfrastructure:
         except Exception as e:
             pytest.fail(f"❌ coin_config schema validation failed: {e}")
     
-    def test_whale_events_partitioning(self, clickhouse_client):
+    def test_whale_events_partitioning(self, whale_client):
         """Test whale_events table partitioning"""
         try:
-            result = clickhouse_client.query("""
+            result = whale_client.query("""
                 SELECT partition_id, name, engine 
                 FROM system.parts 
                 WHERE database = 'bitget' AND table = 'whale_events'
                 LIMIT 1
             """)
             # Should be empty initially, but engine should be ReplacingMergeTree
-            result2 = clickhouse_client.query("""
+            result2 = whale_client.query("""
                 SELECT engine_full 
                 FROM system.tables 
                 WHERE database = 'bitget' AND name = 'whale_events'

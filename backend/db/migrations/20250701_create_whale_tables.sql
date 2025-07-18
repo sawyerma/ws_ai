@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS whale_events (
     
     -- Coin-spezifische Metadaten
     threshold_usd Float64 DEFAULT 0.0,
-    coin_rank UInt16 DEFAULT 0
+    coin_rank UInt16 DEFAULT 0,
+    
+    -- Backfill-Tracking (minimal)
+    backfill_block UInt64 DEFAULT 0,
+    is_backfill UInt8 DEFAULT 0
 )
 ENGINE = ReplacingMergeTree()
 ORDER BY (ts, chain, symbol)
