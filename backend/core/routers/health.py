@@ -4,8 +4,13 @@ from fastapi import APIRouter
 from db.clickhouse import ping
 from core.routers.trades import symbol_clients
 # from core.routers.market_trades import trade_ws_clients  # optional
-from whale.detector import is_detector_alive  # <- NEU (siehe unten)
-from whale.settings import fetch_coins  # für aktives Coin-Mapping
+
+# Whale-System temporär deaktiviert
+def is_detector_alive():
+    return False
+
+def fetch_coins(active=1):
+    return []
 
 router = APIRouter()
 logger = logging.getLogger("trading-api")

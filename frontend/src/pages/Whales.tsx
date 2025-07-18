@@ -3,6 +3,42 @@ import ThemeProvider from "../components/ui/theme-provider";
 import ThemeToggle from "../components/ui/theme-toggle";
 import { Search, ArrowUpDown, Filter } from "lucide-react";
 
+// Backend Whale Event Interface - basierend auf ClickHouse Schema
+interface WhaleEvent {
+  event_id: string;
+  ts: string;
+  chain: string;
+  tx_hash: string;
+  from_addr: string;
+  to_addr: string;
+  token?: string;
+  symbol: string;
+  amount: number;
+  is_native: boolean;
+  exchange: string;
+  amount_usd: number;
+  from_exchange: string;
+  from_country: string;
+  from_city: string;
+  to_exchange: string;
+  to_country: string;
+  to_city: string;
+  is_cross_border: boolean;
+  source: string;
+  threshold_usd: number;
+  coin_rank: number;
+  created_at: string;
+}
+
+// System Status Interface
+interface WhaleSystemStatus {
+  backfill_status: "Running" | "Completed" | "Error";
+  backfill_date: string; // dd.mm.yyyy
+  test_status: "passed" | "failed";
+  last_test_run: string;
+}
+
+// Legacy Interface für Kompatibilität
 interface WhaleTransaction {
   id: number;
   coin: string;
@@ -23,6 +59,28 @@ interface WhalesProps {
 }
 
 const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
+  // Backend Data States
+  const [whaleEvents, setWhaleEvents] = useState<WhaleEvent[]>([]);
+  const [systemStatus, setSystemStatus] = useState<WhaleSystemStatus>({
+    backfill_status: "Running",
+    backfill_date: "15.01.2025",
+    test_status: "passed",
+    last_test_run: new Date().toISOString()
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Chart Data States
+  const [chartData, setChartData] = useState<Array<{time: string, buy: number, sell: number}>>([]);
+  const [chartLoading, setChartLoading] = useState(true);
+  
+  // Available Coins (dynamically populated from backend)
+  const [availableCoins, setAvailableCoins] = useState<string[]>([]);
+  
+  // Available Exchanges (dynamically populated from backend)
+  const [availableExchanges, setAvailableExchanges] = useState<string[]>([]);
+
+  // Filter States
   const [timeFilter, setTimeFilter] = useState("1 Hour");
   const [symbolFilter, setSymbolFilter] = useState("All Symbols");
   const [exchangeFilter, setExchangeFilter] = useState("All Exchanges");
@@ -33,159 +91,249 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
   const [favoriteCoins, setFavoriteCoins] = useState<Set<string>>(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
-  // Sample whale transaction data
-  const [whaleTransactions] = useState<WhaleTransaction[]>([
-    {
-      id: 1,
-      coin: "BTC-USD",
-      exchange: "Coinbase Pro",
-      quantity: "2.00000 BTC",
-      total: "236,686.00 USD",
-      side: "SELL",
-      date: "2024-01-19",
-      time: "14:23:45",
-      marketcap: "$2.1T",
-      maker: "0x742d35Cc6634C0532925a3b8D404fddBD4f4d4d4",
-      age: "23 seconds ago",
-      timestamp: Date.now() - 23000,
-    },
-    {
-      id: 2,
-      coin: "BTC-USD",
-      exchange: "Coinbase Pro",
-      quantity: "2.00000 BTC",
-      total: "236,720.00 USD",
-      side: "SELL",
-      date: "2024-01-19",
-      time: "14:22:18",
-      marketcap: "$2.1T",
-      maker: "0x742d35Cc6634C0532925a3b8D404fddBD4f4d4d4",
-      age: "27 seconds ago",
-      timestamp: Date.now() - 27000,
-    },
-    {
-      id: 3,
-      coin: "BTC-USD",
-      exchange: "Bybit Futures",
-      quantity: "907,200 Cont",
-      total: "907,200.00 USD",
-      side: "BUY",
-      date: "2024-01-19",
-      time: "14:21:32",
-      marketcap: "$2.1T",
-      maker: "0x8f3Cf7ad23Cd3CaDbD9735aff958023239c6A063",
-      age: "28 seconds ago",
-      timestamp: Date.now() - 28000,
-    },
-    {
-      id: 4,
-      coin: "BTC-EUR",
-      exchange: "Bitstamp",
-      quantity: "0.23742489 BTC",
-      total: "24,145.87 EUR",
-      side: "BUY",
-      date: "2024-01-19",
-      time: "14:20:55",
-      marketcap: "$2.1T",
-      maker: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
-      age: "28 seconds ago",
-      timestamp: Date.now() - 28000,
-    },
-    {
-      id: 5,
-      coin: "ETH-USD",
-      exchange: "Binance",
-      quantity: "150.5 ETH",
-      total: "489,125.50 USD",
-      side: "BUY",
-      date: "2024-01-19",
-      time: "14:19:12",
-      marketcap: "$391B",
-      maker: "0xA0b86a33E6411a3b9e6d3a8b5c6e7d8f9e0a1b2c",
-      age: "4 minutes ago",
-      timestamp: Date.now() - 240000,
-    },
-    {
-      id: 6,
-      coin: "SOL-USD",
-      exchange: "FTX",
-      quantity: "5,000 SOL",
-      total: "675,000.00 USD",
-      side: "SELL",
-      date: "2024-01-19",
-      time: "14:15:33",
-      marketcap: "$59B",
-      maker: "0xB1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0",
-      age: "8 minutes ago",
-      timestamp: Date.now() - 480000,
-    },
-  ]);
+  // API Configuration
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-  // Chart data for whale trades visualization
-  const chartData = [
-    { time: "00:00", buy: 50, sell: -30 },
-    { time: "04:00", buy: 80, sell: -60 },
-    { time: "08:00", buy: 35, sell: -25 },
-    { time: "12:00", buy: 90, sell: -80 },
-    { time: "16:00", buy: 45, sell: -70 },
-    { time: "20:00", buy: 100, sell: -50 },
-    { time: "24:00", buy: 75, sell: -40 },
-  ];
-
-  // Filter and sort transactions
-  const filteredTransactions = whaleTransactions
-    .filter(tx => {
-      // Filter by favorites if "Favorites" is selected in symbol filter
-      if (symbolFilter === "Favorites") {
-        if (favoriteCoins.size === 0) return false;
-        return favoriteCoins.has(tx.coin);
+  // API Functions
+  const fetchWhaleEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`${API_BASE}/api/whales/recent?limit=50`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
+      const data = await response.json();
+      setWhaleEvents(data.events || []);
+    } catch (err) {
+      setError(`Failed to load whale events: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error('Whale events fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSystemStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/whales/status`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      setSystemStatus({
+        backfill_status: data.backfill_status || "Running",
+        backfill_date: data.backfill_date || "15.01.2025",
+        test_status: data.test_status || "passed",
+        last_test_run: data.last_test_run || new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('System status fetch error:', err);
+      // Fallback status wenn API fehlschlägt
+      setSystemStatus(prev => ({
+        ...prev,
+        test_status: "failed",
+        last_test_run: new Date().toISOString()
+      }));
+    }
+  };
+
+  const fetchChartData = async () => {
+    try {
+      setChartLoading(true);
+      
+      // Filter whale events by symbol if specified
+      let eventsToProcess = whaleEvents;
+      if (symbolFilter !== "All Symbols" && symbolFilter !== "⭐ Favorites") {
+        eventsToProcess = eventsToProcess.filter(event => 
+          event.symbol.toUpperCase() === symbolFilter.toUpperCase()
+        );
+      }
+      
+      // Filter whale events by exchange if specified
+      if (exchangeFilter !== "All Exchanges") {
+        eventsToProcess = eventsToProcess.filter(event => {
+          const eventExchange = event.exchange || event.from_exchange || event.to_exchange;
+          return eventExchange === exchangeFilter;
+        });
+      }
+      
+      // Convert to hourly chart data
+      const hourlyData = [];
+      for (let hour = 0; hour < 24; hour += 4) {
+        const hourStr = hour.toString().padStart(2, '0') + ':00';
+        
+        // Find data for this hour range
+        const hourEvents = eventsToProcess.filter(event => {
+          const eventHour = new Date(event.ts).getHours();
+          return eventHour >= hour && eventHour < hour + 4;
+        });
+        
+        // Calculate buy/sell volumes (in millions)
+        const buyVolume = hourEvents
+          .filter(event => event.from_exchange === '' && event.to_exchange !== '')
+          .reduce((sum, event) => sum + (event.amount_usd || 0), 0) / 1_000_000;
+        
+        const sellVolume = hourEvents
+          .filter(event => event.from_exchange !== '' && event.to_exchange === '')
+          .reduce((sum, event) => sum + (event.amount_usd || 0), 0) / 1_000_000;
+        
+        hourlyData.push({
+          time: hourStr,
+          buy: Math.round(buyVolume),
+          sell: -Math.round(sellVolume)
+        });
+      }
+      
+      // Always use backend data - no fallback to mock data
+      setChartData(hourlyData);
+      
+    } catch (err) {
+      console.error('Chart data fetch error:', err);
+      // Set empty data on error - no mock fallback
+      setChartData([
+        { time: "00:00", buy: 0, sell: 0 },
+        { time: "04:00", buy: 0, sell: 0 },
+        { time: "08:00", buy: 0, sell: 0 },
+        { time: "12:00", buy: 0, sell: 0 },
+        { time: "16:00", buy: 0, sell: 0 },
+        { time: "20:00", buy: 0, sell: 0 },
+      ]);
+    } finally {
+      setChartLoading(false);
+    }
+  };
+
+  // Initial data load and timers
+  useEffect(() => {
+    // Load initial data
+    fetchWhaleEvents();
+    fetchSystemStatus();
+    fetchChartData();
+
+    // Set up 10-minute timer for tests
+    const testInterval = setInterval(() => {
+      fetchSystemStatus();
+    }, 10 * 60 * 1000); // 10 minutes
+
+    // Set up 30-second timer for whale events refresh
+    const whaleInterval = setInterval(() => {
+      fetchWhaleEvents();
+    }, 30 * 1000); // 30 seconds
+
+    // Set up 5-minute timer for chart data refresh
+    const chartInterval = setInterval(() => {
+      fetchChartData();
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      clearInterval(testInterval);
+      clearInterval(whaleInterval);
+      clearInterval(chartInterval);
+    };
+  }, []);
+
+  // Extract available coins from whale events
+  useEffect(() => {
+    if (whaleEvents.length > 0) {
+      const uniqueCoins = [...new Set(whaleEvents.map(event => event.symbol))].sort();
+      setAvailableCoins(uniqueCoins);
+    }
+  }, [whaleEvents]);
+
+  // Extract available exchanges from whale events
+  useEffect(() => {
+    if (whaleEvents.length > 0) {
+      const uniqueExchanges = [...new Set(whaleEvents.map(event => 
+        event.exchange || event.from_exchange || event.to_exchange
+      ))].filter(ex => ex && ex !== '').sort();
+      setAvailableExchanges(uniqueExchanges);
+    }
+  }, [whaleEvents]);
+
+  // Update chart when symbol or exchange filter changes
+  useEffect(() => {
+    if (whaleEvents.length > 0) {
+      fetchChartData();
+    }
+  }, [symbolFilter, exchangeFilter, whaleEvents]);
+
+
+  // Convert Backend Data to Display Format
+  const formatWhaleEvent = (event: WhaleEvent) => {
+    const date = new Date(event.ts);
+    return {
+      id: event.event_id,
+      chain: event.chain,
+      symbol: event.symbol,
+      amount: event.amount.toFixed(4),
+      amount_usd: event.amount_usd,
+      from_country: event.from_country,
+      to_country: event.to_country,
+      from_city: event.from_city,
+      to_city: event.to_city,
+      exchange: event.exchange || event.from_exchange || event.to_exchange,
+      tx_hash: event.tx_hash,
+      is_cross_border: event.is_cross_border,
+      timestamp: date.getTime(),
+      date: date.toLocaleDateString(),
+      time: date.toLocaleTimeString(),
+      from_addr: event.from_addr,
+      to_addr: event.to_addr
+    };
+  };
+
+  // Filter and sort whale events
+  const filteredWhaleEvents = whaleEvents
+    .filter(event => {
       // Filter by symbol
       if (symbolFilter !== "All Symbols" && symbolFilter !== "Favorites") {
-        if (!tx.coin.toLowerCase().includes(symbolFilter.toLowerCase())) {
+        if (!event.symbol.toLowerCase().includes(symbolFilter.toLowerCase())) {
           return false;
         }
       }
       
       // Filter by exchange
       if (exchangeFilter !== "All Exchanges") {
-        if (tx.exchange !== exchangeFilter) {
+        const eventExchange = event.exchange || event.from_exchange || event.to_exchange;
+        if (eventExchange !== exchangeFilter) {
           return false;
         }
       }
       
-      // Filter by trade type
-      if (tradeFilter !== "All Trades") {
-        if (tradeFilter === "Buy Only" && tx.side !== "BUY") return false;
-        if (tradeFilter === "Sell Only" && tx.side !== "SELL") return false;
-      }
-      
       // Search filter
       if (searchQuery) {
-        return tx.coin.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               tx.exchange.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               tx.maker.toLowerCase().includes(searchQuery.toLowerCase());
+        return event.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+               event.chain.toLowerCase().includes(searchQuery.toLowerCase()) ||
+               event.tx_hash.toLowerCase().includes(searchQuery.toLowerCase());
       }
       
       return true;
     })
     .sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-      
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortDirection === 'asc' 
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
-      }
-      
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-      
-      return 0;
-    });
+      // Sort by timestamp (newest first)
+      const aTime = new Date(a.ts).getTime();
+      const bTime = new Date(b.ts).getTime();
+      return sortDirection === 'asc' ? aTime - bTime : bTime - aTime;
+    })
+    .map(formatWhaleEvent);
+
+  // Display only real backend data - no mock fallback
+  const displayTransactions = filteredWhaleEvents;
 
   const handleSort = (field: keyof WhaleTransaction) => {
     if (sortField === field) {
@@ -335,9 +483,9 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
             >
               <option>All Symbols</option>
               <option>⭐ Favorites</option>
-              <option>BTC</option>
-              <option>ETH</option>
-              <option>SOL</option>
+              {availableCoins.map(coin => (
+                <option key={coin} value={coin}>{coin}</option>
+              ))}
             </select>
 
             <select 
@@ -346,9 +494,9 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
               className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm"
             >
               <option>All Exchanges</option>
-              <option>Coinbase Pro</option>
-              <option>Binance</option>
-              <option>Bybit</option>
+              {availableExchanges.map(exchange => (
+                <option key={exchange} value={exchange}>{exchange}</option>
+              ))}
             </select>
 
             <select 
@@ -399,38 +547,45 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {filteredTransactions.map((tx) => (
+                  {displayTransactions.map((tx: any) => (
                     <tr 
                       key={tx.id} 
                       className="hover:bg-gray-700 transition-colors"
                     >
                       <td className="px-4 py-3 text-sm text-white">{tx.id}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-white">{tx.coin}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-white">
+                        {tx.symbol || tx.coin}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-300">{tx.exchange}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-white">{tx.quantity}</td>
-                      <td className="px-4 py-3 text-sm font-mono font-semibold text-white">{tx.total}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-white">
+                        {tx.amount ? `${tx.amount} ${tx.symbol}` : tx.quantity}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono font-semibold text-white">
+                        {tx.amount_usd ? `$${tx.amount_usd.toLocaleString()}` : tx.total}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${
-                          tx.side === "BUY" 
-                            ? "bg-green-900 text-green-200" 
-                            : "bg-red-900 text-red-200"
+                          tx.is_cross_border ? "bg-yellow-900 text-yellow-200" : "bg-green-900 text-green-200"
                         }`}>
-                          {tx.side}
+                          {tx.is_cross_border ? "CROSS" : "SAME"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">{tx.date} {tx.time}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-white">{tx.marketcap}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-white">
+                        {tx.from_country} → {tx.to_country}
+                      </td>
                       <td className="px-4 py-3 text-sm font-mono text-blue-400">
-                        {tx.maker.slice(0, 8)}...{tx.maker.slice(-4)}
+                        {tx.tx_hash ? `${tx.tx_hash.slice(0, 8)}...${tx.tx_hash.slice(-4)}` : 
+                         (tx.maker && `${tx.maker.slice(0, 8)}...${tx.maker.slice(-4)}`)}
                       </td>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
-                          checked={favoriteCoins.has(tx.coin)}
-                          onChange={() => toggleCoinSelection(tx.coin)}
+                          checked={favoriteCoins.has(tx.symbol || tx.coin)}
+                          onChange={() => toggleCoinSelection(tx.symbol || tx.coin)}
                           className="rounded text-yellow-500"
                         />
-                        {favoriteCoins.has(tx.coin) && (
+                        {favoriteCoins.has(tx.symbol || tx.coin) && (
                           <span className="ml-2 text-yellow-500">⭐</span>
                         )}
                       </td>
@@ -440,14 +595,84 @@ const Whales = ({ onBackToTrading }: WhalesProps = {}) => {
               </table>
             </div>
 
-            {filteredTransactions.length === 0 && (
+            {displayTransactions.length === 0 && (
               <div className="text-center py-12 text-gray-400">
-                {symbolFilter === "⭐ Favorites" && favoriteCoins.size === 0 
+                {loading ? "Loading whale transactions..." : 
+                 error ? `Error: ${error}` :
+                 symbolFilter === "⭐ Favorites" && favoriteCoins.size === 0 
                   ? "No favorite coins selected. Mark coins with ⭐ to see them here."
                   : "No whale transactions found matching your criteria."
                 }
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Status Panel - Bottom Right */}
+        <div className="fixed bottom-6 right-6 bg-gray-800 border border-gray-700 rounded-lg p-4 w-80 shadow-lg z-50">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-white">System Status</h3>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                loading ? 'bg-yellow-500' : 
+                error ? 'bg-red-500' : 
+                'bg-green-500'
+              }`}></div>
+              <span className="text-xs text-gray-400">
+                {loading ? 'Loading...' : error ? 'Error' : 'Online'}
+              </span>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            {/* Backfill Status */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Backfill:</span>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${
+                  systemStatus.backfill_status === "Running" ? "bg-blue-900 text-blue-200" :
+                  systemStatus.backfill_status === "Completed" ? "bg-green-900 text-green-200" :
+                  "bg-red-900 text-red-200"
+                }`}>
+                  {systemStatus.backfill_status}
+                </span>
+                <span className="text-xs text-gray-300">bis {systemStatus.backfill_date}</span>
+              </div>
+            </div>
+
+            {/* Test Status */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Tests:</span>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${
+                  systemStatus.test_status === "passed" ? "bg-green-900 text-green-200" : "bg-red-900 text-red-200"
+                }`}>
+                  {systemStatus.test_status === "passed" ? "✅ Passed" : "❌ Failed"}
+                </span>
+              </div>
+            </div>
+
+            {/* Last Test Run */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Last Test:</span>
+              <span className="text-xs text-gray-300">
+                {new Date(systemStatus.last_test_run).toLocaleTimeString()}
+              </span>
+            </div>
+
+            {/* Data Count */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Events:</span>
+              <span className="text-xs text-gray-300">
+                {whaleEvents.length} loaded
+              </span>
+            </div>
+
+            {/* Refresh Timer */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+              <span className="text-xs text-gray-400">Auto-refresh:</span>
+              <span className="text-xs text-gray-300">30s / 10m</span>
+            </div>
           </div>
         </div>
       </div>

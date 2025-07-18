@@ -15,6 +15,8 @@ from core.routers.orderbook import router as orderbook_router
 from core.routers.health import router as health_router
 from core.routers.ticker import router as ticker_router
 from core.routers.trading import router as trading_router
+from core.routers.whales import router as whales_router
+from core.routers.api_settings import router as api_settings_router
 
 from db.clickhouse import fetch_trades, fetch_bars, fetch_coin_settings, ping
 
@@ -53,6 +55,8 @@ app.include_router(orderbook_router)
 app.include_router(health_router)
 app.include_router(ticker_router)
 app.include_router(trading_router)
+app.include_router(whales_router)
+app.include_router(api_settings_router)
 
 
 # Root-Redirect auf externes Frontend (optional, oder entferne die Funktion!)
@@ -67,21 +71,22 @@ def root():
 async def on_startup():
     logger.info("Trading API gestartet & bereit!")
     
-    # Whale-System parallel starten
-    try:
-        await start_whale_system()
-        logger.info("🐋 Whale Monitoring System gestartet!")
-    except Exception as e:
-        logger.error(f"Failed to start Whale system: {e}")
+    # Whale-System TEMPORÄR DEAKTIVIERT (wegen SpawnProcess Fehler)
+    logger.info("🐋 Whale System deaktiviert für debugging")
+    # try:
+    #     await start_whale_system()
+    #     logger.info("🐋 Whale Monitoring System gestartet!")
+    # except Exception as e:
+    #     logger.error(f"Failed to start Whale system: {e}")
 
 # Shutdown-Event
 @app.on_event("shutdown")
 async def on_shutdown():
     logger.info("Shutting down systems...")
     
-    # Whale-System stoppen
-    try:
-        await stop_whale_system()
-        logger.info("🐋 Whale Monitoring System gestoppt!")
-    except Exception as e:
-        logger.error(f"Failed to stop Whale system: {e}")
+    # Whale-System stoppen (wenn aktiviert)
+    # try:
+    #     await stop_whale_system()
+    #     logger.info("🐋 Whale Monitoring System gestoppt!")
+    # except Exception as e:
+    #     logger.error(f"Failed to stop Whale system: {e}")

@@ -12,6 +12,7 @@ import ML from "./ML";
 import Whales from "./Whales";
 import News from "./News";
 import TradingBot from "./TradingBot";
+import API from "./API";
 import { getSymbols } from "../api/symbols";
 
 interface CoinData {
@@ -28,7 +29,7 @@ interface CoinData {
 
 const Index = () => {
   const [viewMode, setViewMode] = useState<
-    "trading" | "database" | "ai" | "ml" | "whales" | "news" | "bot"
+    "trading" | "database" | "ai" | "ml" | "whales" | "news" | "bot" | "api"
   >("trading");
   const [selectedCoin, setSelectedCoin] = useState("BTCUSDT");
   const [selectedMarket, setSelectedMarket] = useState("spot");
@@ -146,6 +147,9 @@ const Index = () => {
   }
   if (viewMode === "bot") {
     return <TradingBot onBackToTrading={() => setViewMode("trading")} />;
+  }
+  if (viewMode === "api") {
+    return <API onBackToTrading={() => setViewMode("trading")} />;
   }
 
   return (

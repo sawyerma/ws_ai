@@ -5,7 +5,7 @@ import SettingsModal from "./settings-modal";
 interface TradingNavProps {
   onTradingModeChange?: (mode: string) => void;
   onViewChange?: (
-    view: "trading" | "database" | "ai" | "ml" | "whales" | "news" | "bot",
+    view: "trading" | "database" | "ai" | "ml" | "whales" | "news" | "bot" | "api",
   ) => void;
 }
 
@@ -50,6 +50,7 @@ const TradingNav = ({ onTradingModeChange, onViewChange }: TradingNavProps) => {
     { name: "Database" },
     { name: "Whales" },
     { name: "News" },
+    { name: "API" },
     { name: "Settings" },
   ];
 
@@ -90,6 +91,11 @@ const TradingNav = ({ onTradingModeChange, onViewChange }: TradingNavProps) => {
     } else if (itemName === "Trading Bot") {
       if (onViewChange) {
         onViewChange("bot");
+      }
+      setIsDropdownOpen(false);
+    } else if (itemName === "API") {
+      if (onViewChange) {
+        onViewChange("api");
       }
       setIsDropdownOpen(false);
     } else {
