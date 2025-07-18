@@ -18,6 +18,9 @@ from core.routers.trading import router as trading_router
 
 from db.clickhouse import fetch_trades, fetch_bars, fetch_coin_settings, ping
 
+# Whale-System Import
+from whales.main_whales import start_whale_system, stop_whale_system
+
 # Logging-Konfiguration
 logging.basicConfig(
     level=logging.INFO,
@@ -63,3 +66,22 @@ def root():
 @app.on_event("startup")
 async def on_startup():
     logger.info("Trading API gestartet & bereit!")
+    
+    # Whale-System parallel starten
+    try:
+        await start_whale_system()
+        logger.info("🐋 Whale Monitoring System gestartet!")
+    except Exception as e:
+        logger.error(f"Failed to start Whale system: {e}")
+
+# Shutdown-Event
+@app.on_event("shutdown")
+async def on_shutdown():
+    logger.info("Shutting down systems...")
+    
+    # Whale-System stoppen
+    try:
+        await stop_whale_system()
+        logger.info("🐋 Whale Monitoring System gestoppt!")
+    except Exception as e:
+        logger.error(f"Failed to stop Whale system: {e}")

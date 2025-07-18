@@ -31,6 +31,9 @@ watchfiles==1.1.0
 websockets==15.0.1
 clickhouse-connect==0.7.9
 
+# === WHALE SYSTEM ===
+aiohttp==3.9.3
+
 # === INDICATORS: DataFrame, Math, TA, Signalprocessing ===
 pandas==2.2.2
 numpy==1.26.4
