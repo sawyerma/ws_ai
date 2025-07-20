@@ -1,22 +1,27 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 import aiohttp
 import asyncio
 import logging
 import os
 from datetime import datetime
+import hmac
+import hashlib
+import time
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 class APIKeysRequest(BaseModel):
-    keys: Dict[str, str]
+    keys: Dict[str, Union[str, Dict[str, str]]]
 
 class ValidateAPIKeyRequest(BaseModel):
     provider: str
     apiKey: str
+    secret: Optional[str] = None
+    passphrase: Optional[str] = None
 
 class APIKeysResponse(BaseModel):
     keys: Dict[str, str]
@@ -96,6 +101,10 @@ async def validate_api_key(request: ValidateAPIKeyRequest):
             is_valid, message = await _validate_polygonscan_key(request.apiKey)
         elif request.provider == "coingecko":
             is_valid, message = await _validate_coingecko_key(request.apiKey)
+        elif request.provider == "bitget":
+            if not request.secret or not request.passphrase:
+                return ValidateAPIKeyResponse(valid=False, message="Bitget requires API Key, Secret, and Passphrase")
+            is_valid, message = await _validate_bitget_key(request.apiKey, request.secret, request.passphrase)
         else:
             return ValidateAPIKeyResponse(valid=False, message=f"Unknown provider: {request.provider}")
         
@@ -219,6 +228,52 @@ async def _validate_coingecko_key(api_key: str) -> tuple[bool, str]:
                         return False, f"CoinGecko API not accessible: HTTP {response.status}"
         except:
             return False, f"Network error: {str(e)}"
+
+async def _validate_bitget_key(api_key: str, secret: str, passphrase: str) -> tuple[bool, str]:
+    """Validate Bitget API key with HMAC signature"""
+    try:
+        # 1. Zeitstempel erstellen
+        timestamp = str(int(time.time() * 1000))
+        
+        # 2. Nachricht für Signatur erstellen
+        method = "GET"
+        endpoint = "/api/spot/v1/account/info"
+        message = timestamp + method + endpoint
+        
+        # 3. HMAC-SHA256 Signatur berechnen
+        signature = hmac.new(
+            secret.encode('utf-8'),
+            message.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        
+        # 4. Anfrage an Bitget senden
+        headers = {
+            "X-Bitget-Api-Key": api_key,
+            "X-Bitget-Api-Signature": signature,
+            "X-Bitget-Api-Timestamp": timestamp,
+            "X-Bitget-Api-Passphrase": passphrase,
+            "Content-Type": "application/json"
+        }
+        
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.get(f"https://api.bitget.com{endpoint}", headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("code") == "00000":
+                        return True, "Valid Bitget API credentials - Premium features activated"
+                    else:
+                        return False, f"Bitget API error: {data.get('msg', 'Unknown error')}"
+                elif response.status == 401:
+                    return False, "Invalid Bitget API credentials"
+                else:
+                    return False, f"Bitget API error: HTTP {response.status}"
+                    
+    except asyncio.TimeoutError:
+        return False, "Bitget API timeout - check your internet connection"
+    except Exception as e:
+        logger.error(f"Bitget validation error: {str(e)}")
+        return False, f"Validation error: {str(e)}"
 
 # Health check endpoint
 @router.get("/api/settings/health")

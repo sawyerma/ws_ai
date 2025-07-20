@@ -19,6 +19,8 @@ interface APIKeyConfig {
   registerUrl: string;
   status: "connected" | "error" | "pending" | "not_configured";
   lastChecked?: string;
+  secret?: string;      // NEU für Bitget
+  passphrase?: string;  // NEU für Bitget
 }
 
 const API = ({ onBackToTrading }: APIProps = {}) => {
@@ -54,10 +56,22 @@ const API = ({ onBackToTrading }: APIProps = {}) => {
       description: "Cryptocurrency price data and market information",
       registerUrl: "https://www.coingecko.com/en/api",
       status: "not_configured"
+    },
+    bitget: {
+      name: "Bitget",
+      key: "",
+      secret: "",
+      passphrase: "",
+      url: "https://api.bitget.com/api/v2",
+      description: "Exchange data for trading and market analysis",
+      registerUrl: "https://www.bitget.com/api-doc/",
+      status: "not_configured"
     }
   });
 
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [showPassphrases, setShowPassphrases] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
@@ -97,12 +111,12 @@ const API = ({ onBackToTrading }: APIProps = {}) => {
     }
   };
 
-  const handleKeyChange = (provider: string, value: string) => {
+  const handleKeyChange = (provider: string, field: string, value: string) => {
     setApiKeys(prev => ({
       ...prev,
       [provider]: {
         ...prev[provider],
-        key: value,
+        [field]: value,
         status: value ? "pending" : "not_configured"
       }
     }));
@@ -117,21 +131,43 @@ const API = ({ onBackToTrading }: APIProps = {}) => {
 
   const validateAPIKey = async (provider: string) => {
     const config = apiKeys[provider];
-    if (!config.key.trim()) return;
+    
+    // Spezielle Behandlung für Bitget
+    if (provider === 'bitget') {
+      if (!config.key || !config.secret || !config.passphrase) {
+        setApiKeys(prev => ({
+          ...prev,
+          [provider]: {
+            ...prev[provider],
+            status: "error",
+            lastChecked: new Date().toISOString()
+          }
+        }));
+        return;
+      }
+    } else {
+      if (!config.key.trim()) return;
+    }
 
     setLoading(prev => ({ ...prev, [provider]: true }));
 
     try {
+      const payload = provider === 'bitget' 
+        ? { 
+            provider,
+            apiKey: config.key,
+            secret: config.secret,
+            passphrase: config.passphrase
+          }
+        : { provider, apiKey: config.key };
+
       const response = await fetch(`${API_BASE}/api/settings/validate-api-key`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          provider,
-          apiKey: config.key
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -166,7 +202,16 @@ const API = ({ onBackToTrading }: APIProps = {}) => {
 
     try {
       const keysToSave = Object.fromEntries(
-        Object.entries(apiKeys).map(([provider, config]) => [provider, config.key])
+        Object.entries(apiKeys).map(([provider, config]) => {
+          if (provider === 'bitget') {
+            return [provider, {
+              key: config.key,
+              secret: config.secret,
+              passphrase: config.passphrase
+            }];
+          }
+          return [provider, config.key];
+        })
       );
 
       const response = await fetch(`${API_BASE}/api/settings/api-keys`, {
@@ -320,7 +365,7 @@ const API = ({ onBackToTrading }: APIProps = {}) => {
                       <Input
                         type={showKeys[provider] ? "text" : "password"}
                         value={config.key}
-                        onChange={(e) => handleKeyChange(provider, e.target.value)}
+                        onChange={(e) => handleKeyChange(provider, 'key', e.target.value)}
                         placeholder={`Enter your ${config.name} API key`}
                         className="bg-gray-700 border-gray-600 text-white pr-20"
                       />
@@ -345,6 +390,59 @@ const API = ({ onBackToTrading }: APIProps = {}) => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Bitget-spezifische Felder */}
+                  {provider === 'bitget' && (
+                    <>
+                      {/* Secret Key */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-300">
+                          Secret Key
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type={showSecrets[provider] ? "text" : "password"}
+                            value={config.secret || ''}
+                            onChange={(e) => handleKeyChange(provider, 'secret', e.target.value)}
+                            placeholder="Enter your Secret Key"
+                            className="bg-gray-700 border-gray-600 text-white pr-20"
+                          />
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                            <button
+                              onClick={() => setShowSecrets(prev => ({ ...prev, [provider]: !prev[provider] }))}
+                              className="p-1 text-gray-400 hover:text-white transition-colors"
+                            >
+                              {showSecrets[provider] ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Passphrase */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-300">
+                          Passphrase
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type={showPassphrases[provider] ? "text" : "password"}
+                            value={config.passphrase || ''}
+                            onChange={(e) => handleKeyChange(provider, 'passphrase', e.target.value)}
+                            placeholder="Enter your Passphrase"
+                            className="bg-gray-700 border-gray-600 text-white pr-20"
+                          />
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                            <button
+                              onClick={() => setShowPassphrases(prev => ({ ...prev, [provider]: !prev[provider] }))}
+                              className="p-1 text-gray-400 hover:text-white transition-colors"
+                            >
+                              {showPassphrases[provider] ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {/* API URL */}
                   <div className="space-y-2">
