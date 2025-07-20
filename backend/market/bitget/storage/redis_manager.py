@@ -4,28 +4,39 @@ import hashlib
 import json
 import gzip
 import time
+from typing import Dict, Any, Optional
 from market.bitget.config import redis_config, system_config, TLS_CONFIG
-from market.bitget.utils.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger("redis-manager")
 
 class RedisConnectionPool:
     def __init__(self):
         self._pool = None
-        self._circuit_breaker = CircuitBreaker()
+        self._connection_failures = 0
+        self._last_failure_time = 0
         
     async def initialize(self):
         try:
+            # Redis-spezifische SSL-Konfiguration (ohne TLS_CONFIG für WebSocket)
+            redis_ssl_config = {}
+            if redis_config.host not in ['localhost', '127.0.0.1']:
+                # SSL nur für Remote-Verbindungen aktivieren
+                redis_ssl_config = {
+                    'ssl': True,
+                    'ssl_check_hostname': False,
+                    'ssl_cert_reqs': 'none'
+                }
+            
             self._pool = aioredis.ConnectionPool(
                 host=redis_config.host,
                 port=redis_config.port,
-                password=redis_config.password,
+                password=redis_config.password if redis_config.password else None,
                 max_connections=redis_config.pool_size,
-                **TLS_CONFIG
+                **redis_ssl_config
             )
-            logger.info("Redis connection pool initialized")
+            logger.info(f"✅ Redis connection pool initialized - Host: {redis_config.host}:{redis_config.port}")
         except Exception as e:
-            logger.error(f"Redis initialization failed: {e}")
+            logger.error(f"❌ Redis initialization failed: {e}")
             raise
             
     async def get_connection(self):
@@ -34,10 +45,15 @@ class RedisConnectionPool:
         return aioredis.Redis(connection_pool=self._pool)
         
     async def execute(self, command: str, *args, **kwargs):
-        async def _execute():
+        """Führt Redis-Kommandos mit Fehlerbehandlung aus"""
+        try:
             async with await self.get_connection() as conn:
                 return await getattr(conn, command)(*args, **kwargs)
-        return await self._circuit_breaker.execute(_execute)
+        except Exception as e:
+            self._connection_failures += 1
+            self._last_failure_time = time.time()
+            logger.error(f"Redis command '{command}' failed: {e}")
+            raise
 
 class RedisManager:
     def __init__(self):
@@ -45,7 +61,23 @@ class RedisManager:
         self._dedupe_cache = {}
         
     async def initialize(self):
+        """Initialisiert Redis-Verbindung"""
         await self._pool.initialize()
+        logger.info("✅ Redis Manager initialized")
+    
+    async def ping(self) -> bool:
+        """Testet Redis-Verbindung"""
+        try:
+            # Direkte Redis-Verbindung für Ping
+            redis_client = await self._pool.get_connection()
+            result = await redis_client.ping()
+            await redis_client.close()
+            
+            logger.info(f"✅ Redis ping successful: {result}")
+            return result is True or result == b'PONG' or result == 'PONG'
+        except Exception as e:
+            logger.error(f"❌ Redis ping failed: {e}")
+            return False
         
     async def add_trade(self, symbol: str, trade: dict, market_type: str = "spot") -> bool:
         trade["market_type"] = market_type
@@ -66,6 +98,32 @@ class RedisManager:
         
         self._dedupe_cache[trade_hash] = time.time()
         return True
+    
+    async def add_orderbook(self, symbol: str, orderbook_data: dict, market_type: str = "spot") -> bool:
+        """Speichert Orderbuch-Daten (Premium Feature)"""
+        try:
+            orderbook_key = f"orderbook:{symbol}:{market_type}"
+            
+            # Orderbuch mit TTL speichern
+            compressed_data = self._compress_data({
+                "symbol": symbol,
+                "market_type": market_type,
+                "data": orderbook_data,
+                "timestamp": int(time.time() * 1000)
+            })
+            
+            await self._pool.execute(
+                "setex", 
+                orderbook_key, 
+                redis_config.orderbook_ttl,  # 30 Sekunden TTL
+                compressed_data
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to store orderbook for {symbol}: {e}")
+            return False
         
     def _generate_trade_hash(self, trade: dict) -> str:
         data = f"{trade['symbol']}:{trade['market_type']}:{trade['timestamp']}:{trade['price']}:{trade['size']}"
