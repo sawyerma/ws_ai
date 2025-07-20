@@ -4,7 +4,7 @@ import logging
 import websockets
 import time
 from datetime import datetime, timezone
-from market.bitget.config import bitget_config
+from market.bitget.config import bitget_config, TLS_CONFIG
 from market.bitget.utils.adaptive_rate_limiter import AdaptiveRateLimiter
 from market.bitget.utils.circuit_breaker import CircuitBreaker
 from market.bitget.storage.redis_manager import redis_manager

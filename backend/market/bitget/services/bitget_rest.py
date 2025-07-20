@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import base64
 import time
+from typing import Dict, List
 from market.bitget.config import bitget_config
 
 logger = logging.getLogger("bitget-rest")

@@ -4,7 +4,7 @@ import hashlib
 import json
 import gzip
 import time
-from market.bitget.config import redis_config, system_config
+from market.bitget.config import redis_config, system_config, TLS_CONFIG
 from market.bitget.utils.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger("redis-manager")

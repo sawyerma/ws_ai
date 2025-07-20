@@ -28,10 +28,6 @@ class BitgetConfig:
     # REST API
     rest_base_url: str = "https://api.bitget.com"
     
-    # WebSocket URLs
-    spot_ws_url: str = "wss://ws.bitget.com/spot/v1/stream"
-    futures_ws_url: str = "wss://ws.bitget.com/mix/v1/stream"
-    
     # API Credentials
     api_key: str = os.getenv("BITGET_API_KEY", "")
     secret_key: str = os.getenv("BITGET_SECRET_KEY", "")

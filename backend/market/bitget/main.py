@@ -3,6 +3,12 @@ import signal
 import logging
 from fastapi import FastAPI
 import uvicorn
+from market.bitget.config import (
+    redis_config,  
+    clickhouse_config,
+    bitget_config,
+    system_config
+)
 from market.bitget.services.symbol_manager import symbol_manager
 from market.bitget.services.bitget_client import BitgetWebSocketClient
 from market.bitget.api.ws_manager import ws_manager, handle_websocket_connection
