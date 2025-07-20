@@ -1,6 +1,6 @@
 import os
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 from datetime import datetime, timezone
 
@@ -38,7 +38,7 @@ class BitgetConfig:
     historical_rps: float = 3.0
     
     # Market Type Mappings
-    market_mappings: Dict = {
+    market_mappings: Dict = field(default_factory=lambda: {
         "spot": {
             "ws_url": "wss://ws.bitget.com/spot/v1/stream",
             "inst_type": "SP",
@@ -59,7 +59,7 @@ class BitgetConfig:
             "inst_type": "CMCBL",
             "suffix": "_CMCBL"
         }
-    }
+    })
 
 @dataclass
 class BinanceConfig:
@@ -71,22 +71,22 @@ class BinanceConfig:
 @dataclass
 class SystemConfig:
     # Auto-discovered symbols (will be populated)
-    symbols: List[str] = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]  # Default fallback
-    market_types: List[str] = ["spot", "usdtm"]  # Default markets
+    symbols: List[str] = field(default_factory=lambda: ["BTCUSDT", "ETHUSDT", "SOLUSDT"])  # Default fallback
+    market_types: List[str] = field(default_factory=lambda: ["spot", "usdtm"])  # Default markets
     
     # Symbol selection criteria
     min_volume_24h: float = 1000000.0  # Minimum $1M volume
     max_symbols_per_market: int = 30   # Max symbols per market type
     
     # Resolution settings
-    resolutions: List[int] = [1, 60, 300, 900]  # 1s, 1m, 5m, 15m
+    resolutions: List[int] = field(default_factory=lambda: [1, 60, 300, 900])  # 1s, 1m, 5m, 15m
     deduplication_window: int = 3600
     
     # Historical target dates per symbol
-    historical_target_dates: Dict[str, datetime] = {
+    historical_target_dates: Dict[str, datetime] = field(default_factory=lambda: {
         "BTCUSDT": datetime(2020, 1, 1, tzinfo=timezone.utc),
         "ETHUSDT": datetime(2021, 1, 1, tzinfo=timezone.utc)
-    }
+    })
 
 # TLS-Konfiguration
 TLS_CONFIG = {
