@@ -34,7 +34,7 @@ GET /api/whale-chart-data
 ### **WhaleTransaction Interface**
 ```typescript
 interface WhaleTransaction {
-  id: number;                    // Eindeutige Transaction ID
+  id: number;                    // Eindeutige    Transaction ID
   coin: string;                  // z.B. "BTC-USD", "ETH-USDT"
   exchange: string;              // z.B. "Coinbase Pro", "Binance"
   quantity: string;              // z.B. "2.00000 BTC", "150.5 ETH"

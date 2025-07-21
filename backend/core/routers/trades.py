@@ -8,8 +8,8 @@ from typing import Dict, Set, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Body, HTTPException, Query
 
 from db.clickhouse import insert_trade, fetch_trades
-from exchanges.bitget.collector import BitgetCollector
-from exchanges.bitget.backfill import BitgetBackfill
+from market.bitget.services.bitget_collector import BitgetCollector
+from market.bitget.services.bitget_backfill import BitgetBackfill
 from core.routers.symbols import get_symbols  # Optional für Routing-Integration
 from core.services.cache_service import cached, DEFAULT_TTL
 

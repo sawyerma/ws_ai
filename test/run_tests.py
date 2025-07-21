@@ -51,9 +51,12 @@ class TestRunner:
                 result = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
                 return result.returncode == 0, result.stdout, result.stderr
             else:
+                # Live output anzeigen
+                print(f"{Colors.BLUE}🔄 Executing: {cmd}{Colors.END}")
                 result = subprocess.run(cmd, shell=True, cwd=cwd)
                 return result.returncode == 0, "", ""
         except Exception as e:
+            print(f"{Colors.RED}❌ Command failed: {e}{Colors.END}")
             return False, "", str(e)
             
     def check_docker_running(self):
@@ -62,41 +65,81 @@ class TestRunner:
         return success
         
     def start_docker_compose(self):
-        """Startet Docker Compose"""
-        self.print_info("Starte Docker Compose...")
+        """Startet Docker Compose mit ALLEN Services und zeigt Logs"""
+        self.print_info("Starte Docker Compose mit allen Services...")
         
         if not self.check_docker_running():
             self.print_error("Docker ist nicht gestartet. Bitte Docker starten!")
             return False
             
-        # Docker Compose starten
-        success, stdout, stderr = self.run_command("docker-compose up -d", cwd=BASE_DIR, capture_output=True)
-        if success:
-            self.print_success("Docker Compose gestartet")
-            self.docker_started = True
-            
-            # Warten bis Services bereit sind
-            self.print_info("Warte auf Services...")
-            time.sleep(10)
-            
-            # ClickHouse Status prüfen
-            success, stdout, stderr = self.run_command("docker ps | grep clickhouse", capture_output=True)
-            if success and "clickhouse" in stdout:
-                self.print_success("ClickHouse läuft")
-            else:
-                self.print_error("ClickHouse nicht gefunden")
-                
-            # Redis Status prüfen  
-            success, stdout, stderr = self.run_command("docker ps | grep redis", capture_output=True)
-            if success and "redis" in stdout:
-                self.print_success("Redis läuft")
-            else:
-                self.print_error("Redis nicht gefunden")
-                
-            return True
-        else:
+        # Alle Services explizit starten
+        self.print_info("Starte alle Services (clickhouse, redis, backend, frontend)...")
+        success, stdout, stderr = self.run_command("docker-compose up -d clickhouse-bolt redis-bolt backend_bolt frontend_bolt", cwd=BASE_DIR, capture_output=True)
+        
+        if not success:
             self.print_error(f"Docker Compose Start fehlgeschlagen: {stderr}")
+            self.print_info("Zeige Docker Compose Logs...")
+            self.run_command("docker-compose logs --tail=20", cwd=BASE_DIR)
             return False
+        
+        self.print_success("Docker Compose Services gestartet")
+        self.docker_started = True
+        
+        # Live Logs während dem Warten anzeigen
+        self.print_info("Warte auf Services (30 Sekunden) - zeige Live Logs...")
+        for i in range(6):  # 6 x 5 Sekunden = 30 Sekunden
+            time.sleep(5)
+            self.print_info(f"Warteschritt {i+1}/6 - zeige aktuelle Docker Logs...")
+            self.run_command("docker-compose logs --tail=5", cwd=BASE_DIR)
+            print(f"{Colors.CYAN}{'='*50}{Colors.END}")
+        
+        # Service Status prüfen
+        success, stdout, stderr = self.run_command("docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'", capture_output=True)
+        if success:
+            self.print_info("Aktuelle Docker Container:")
+            print(stdout)
+        
+        # ClickHouse Status prüfen
+        success, stdout, stderr = self.run_command("docker ps | grep clickhouse", capture_output=True)
+        if success and "clickhouse" in stdout:
+            self.print_success("ClickHouse läuft")
+        else:
+            self.print_error("ClickHouse nicht gefunden")
+            self.run_command("docker logs clickhouse-bolt --tail=10", cwd=BASE_DIR)
+            
+        # Redis Status prüfen  
+        success, stdout, stderr = self.run_command("docker ps | grep redis", capture_output=True)
+        if success and "redis" in stdout:
+            self.print_success("Redis läuft")
+        else:
+            self.print_error("Redis nicht gefunden")
+            self.run_command("docker logs redis-bolt --tail=10", cwd=BASE_DIR)
+        
+        # Backend Status prüfen
+        success, stdout, stderr = self.run_command("docker ps | grep backend", capture_output=True)
+        if success and "backend" in stdout:
+            self.print_success("Backend läuft")
+            # Backend Health Check
+            self.print_info("Teste Backend Health...")
+            success, stdout, stderr = self.run_command("curl -s http://localhost:8100/health || echo 'Backend nicht erreichbar'", capture_output=True)
+            if "ok" in stdout.lower() or "healthy" in stdout.lower():
+                self.print_success("Backend Health Check erfolgreich")
+            else:
+                self.print_error("Backend nicht erreichbar - zeige Logs:")
+                self.run_command("docker logs backend-bolt --tail=20", cwd=BASE_DIR)
+        else:
+            self.print_error("Backend nicht gefunden - zeige Logs:")
+            self.run_command("docker logs backend-bolt --tail=20", cwd=BASE_DIR)
+            
+        # Frontend Status prüfen
+        success, stdout, stderr = self.run_command("docker ps | grep frontend", capture_output=True)
+        if success and "frontend" in stdout:
+            self.print_success("Frontend läuft")
+        else:
+            self.print_error("Frontend nicht gefunden")
+            self.run_command("docker logs frontend-bolt --tail=10", cwd=BASE_DIR)
+            
+        return True
             
     def setup_venv(self):
         """Setup Virtual Environment"""
