@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, HTTPException, Query
-from exchanges.bitget.rest_utils import fetch_orderbook
+from market.bitget.services.bitget_rest import BitgetRestAPI
 from core.services.cache_service import cached
 
 router = APIRouter()
@@ -17,10 +17,23 @@ async def get_orderbook(
     Holt Orderbuch für ein Symbol/Markt über zentrale Bitget-Utility.
     """
     try:
-        data = await fetch_orderbook(symbol, market_type, limit)
-        asks = [{"price": float(p), "size": float(s)} for p, s in data.get("asks", [])]
-        bids = [{"price": float(p), "size": float(s)} for p, s in data.get("bids", [])]
-        return {"asks": asks, "bids": bids}
+        api = BitgetRestAPI()
+        
+        if market_type == "spot":
+            response = await api.fetch_spot_orderbook(symbol, limit)
+        else:
+            response = await api.fetch_futures_orderbook(symbol, market_type.upper() + "-FUTURES", limit)
+        
+        await api.close()
+        
+        if response.get("code") == "00000":
+            data = response.get("data", {})
+            asks = [{"price": float(p), "size": float(s)} for p, s in data.get("asks", [])]
+            bids = [{"price": float(p), "size": float(s)} for p, s in data.get("bids", [])]
+            return {"asks": asks, "bids": bids}
+        else:
+            raise Exception(f"Bitget API error: {response.get('msg', 'Unknown error')}")
+            
     except Exception as e:
         logger.error("Orderbook-Fehler:", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Orderbook-Error: {e}")

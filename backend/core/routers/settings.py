@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
 from db.clickhouse import fetch_coin_settings, upsert_coin_setting
-from exchanges.bitget.backfill import BitgetBackfill
+from market.bitget.historical import BitgetBackfill
 
 router = APIRouter(
     prefix="/settings",

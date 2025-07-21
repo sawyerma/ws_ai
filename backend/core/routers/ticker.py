@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-from exchanges.bitget.rest_utils import fetch_spot_tickers, fetch_futures_tickers
+from market.bitget.services.bitget_rest import BitgetRestAPI
 
 router = APIRouter()
 logger = logging.getLogger("trading-api")
@@ -16,64 +16,40 @@ async def get_ticker() -> List[Dict[str, Any]]:
     Holt aktuelle Ticker/Preise für alle Symbole und Märkte von Bitget REST.
     """
     try:
+        api = BitgetRestAPI()
         out: List[Dict[str, Any]] = []
 
         # Spot-Ticker
-        spot_tickers = await fetch_spot_tickers()
-        for tk in spot_tickers:
-            out.append({
-                "symbol":      tk["symbol"],
-                "last":        float(tk.get("last", 0)),
-                "high24h":     float(tk.get("high24h", 0)),
-                "low24h":      float(tk.get("low24h", 0)),
-                "changeRate":  float(tk.get("changeRate", 0)),
-                "baseVol":     float(tk.get("baseVol", 0)),
-                "quoteVol":    float(tk.get("quoteVol", 0)),
-                "market_type": "spot",
-            })
+        spot_tickers_data = await api.fetch_spot_tickers()
+        if spot_tickers_data.get("code") == "00000":
+            for tk in spot_tickers_data.get("data", []):
+                out.append({
+                    "symbol":      tk["symbol"],
+                    "last":        float(tk.get("last", 0)),
+                    "high24h":     float(tk.get("high24h", 0)),
+                    "low24h":      float(tk.get("low24h", 0)),
+                    "changeRate":  float(tk.get("changeRate", 0)),
+                    "baseVol":     float(tk.get("baseVol", 0)),
+                    "quoteVol":    float(tk.get("quoteVol", 0)),
+                    "market_type": "spot",
+                })
 
         # USDT-Margined Futures
-        usdtm_tickers = await fetch_futures_tickers("umcbl")
-        for tk in usdtm_tickers:
-            out.append({
-                "symbol":      tk["symbol"],
-                "last":        float(tk.get("last", 0)),
-                "high24h":     float(tk.get("high24h", 0)),
-                "low24h":      float(tk.get("low24h", 0)),
-                "changeRate":  float(tk.get("changeRate", 0)),
-                "baseVol":     float(tk.get("baseVol", 0)),
-                "quoteVol":    float(tk.get("quoteVol", 0)),
-                "market_type": "usdtm",
-            })
+        usdtm_tickers_data = await api.fetch_futures_tickers("USDT-FUTURES")
+        if usdtm_tickers_data.get("code") == "00000":
+            for tk in usdtm_tickers_data.get("data", []):
+                out.append({
+                    "symbol":      tk["symbol"],
+                    "last":        float(tk.get("last", 0)),
+                    "high24h":     float(tk.get("high24h", 0)),
+                    "low24h":      float(tk.get("low24h", 0)),
+                    "changeRate":  float(tk.get("changeRate", 0)),
+                    "baseVol":     float(tk.get("baseVol", 0)),
+                    "quoteVol":    float(tk.get("quoteVol", 0)),
+                    "market_type": "usdtm",
+                })
 
-        # Coin-Margined Futures
-        coinm_tickers = await fetch_futures_tickers("dmcbl")
-        for tk in coinm_tickers:
-            out.append({
-                "symbol":      tk["symbol"],
-                "last":        float(tk.get("last", 0)),
-                "high24h":     float(tk.get("high24h", 0)),
-                "low24h":      float(tk.get("low24h", 0)),
-                "changeRate":  float(tk.get("changeRate", 0)),
-                "baseVol":     float(tk.get("baseVol", 0)),
-                "quoteVol":    float(tk.get("quoteVol", 0)),
-                "market_type": "coinm",
-            })
-
-        # USDC-Margined Futures
-        usdcm_tickers = await fetch_futures_tickers("cmcbl")
-        for tk in usdcm_tickers:
-            out.append({
-                "symbol":      tk["symbol"],
-                "last":        float(tk.get("last", 0)),
-                "high24h":     float(tk.get("high24h", 0)),
-                "low24h":      float(tk.get("low24h", 0)),
-                "changeRate":  float(tk.get("changeRate", 0)),
-                "baseVol":     float(tk.get("baseVol", 0)),
-                "quoteVol":    float(tk.get("quoteVol", 0)),
-                "market_type": "usdcm",
-            })
-
+        await api.close()
         return out
 
     except Exception as e:

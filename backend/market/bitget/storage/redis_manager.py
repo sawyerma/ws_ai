@@ -4,151 +4,185 @@ import hashlib
 import json
 import gzip
 import time
-from typing import Dict, Any, Optional
-from market.bitget.config import redis_config, system_config, TLS_CONFIG
+from typing import Dict, Any, Optional, List
+from market.bitget.config import redis_config, system_config
 
 logger = logging.getLogger("redis-manager")
 
 class RedisConnectionPool:
+    """Hochleistungs-Verbindungspool für Redis"""
+    
     def __init__(self):
         self._pool = None
-        self._connection_failures = 0
-        self._last_failure_time = 0
         
     async def initialize(self):
+        """Initialisiert den Connection Pool"""
         try:
-            # Redis-spezifische SSL-Konfiguration (ohne TLS_CONFIG für WebSocket)
-            redis_ssl_config = {}
-            if redis_config.host not in ['localhost', '127.0.0.1']:
-                # SSL nur für Remote-Verbindungen aktivieren
-                redis_ssl_config = {
-                    'ssl': True,
-                    'ssl_check_hostname': False,
-                    'ssl_cert_reqs': 'none'
-                }
-            
             self._pool = aioredis.ConnectionPool(
                 host=redis_config.host,
                 port=redis_config.port,
-                password=redis_config.password if redis_config.password else None,
+                password=redis_config.password or None,
                 max_connections=redis_config.pool_size,
-                **redis_ssl_config
+                ssl=redis_config.host not in ['localhost', '127.0.0.1'],
+                ssl_cert_reqs='none',
+                decode_responses=False
             )
-            logger.info(f"✅ Redis connection pool initialized - Host: {redis_config.host}:{redis_config.port}")
+            logger.info(f"✅ Redis pool initialized: {redis_config.host}:{redis_config.port}")
         except Exception as e:
-            logger.error(f"❌ Redis initialization failed: {e}")
+            logger.error(f"❌ Redis init failed: {e}")
             raise
             
     async def get_connection(self):
+        """Holt eine Verbindung aus dem Pool"""
         if not self._pool:
             await self.initialize()
         return aioredis.Redis(connection_pool=self._pool)
-        
-    async def execute(self, command: str, *args, **kwargs):
-        """Führt Redis-Kommandos mit Fehlerbehandlung aus"""
-        try:
-            async with await self.get_connection() as conn:
-                return await getattr(conn, command)(*args, **kwargs)
-        except Exception as e:
-            self._connection_failures += 1
-            self._last_failure_time = time.time()
-            logger.error(f"Redis command '{command}' failed: {e}")
-            raise
 
 class RedisManager:
+    """Hochleistungs-Manager für Redis-Operationen"""
+    
     def __init__(self):
         self._pool = RedisConnectionPool()
         self._dedupe_cache = {}
+        self._last_cleanup = time.time()
         
     async def initialize(self):
-        """Initialisiert Redis-Verbindung"""
+        """Initialisiert den Manager"""
         await self._pool.initialize()
-        logger.info("✅ Redis Manager initialized")
-    
+        logger.info("✅ Redis Manager ready")
+        
     async def ping(self) -> bool:
-        """Testet Redis-Verbindung"""
+        """Überprüft die Verbindung"""
         try:
-            # Direkte Redis-Verbindung für Ping
-            redis_client = await self._pool.get_connection()
-            result = await redis_client.ping()
-            await redis_client.close()
-            
-            logger.info(f"✅ Redis ping successful: {result}")
-            return result is True or result == b'PONG' or result == 'PONG'
-        except Exception as e:
-            logger.error(f"❌ Redis ping failed: {e}")
-            return False
-        
-    async def add_trade(self, symbol: str, trade: dict, market_type: str = "spot") -> bool:
-        trade["market_type"] = market_type
-        trade_hash = self._generate_trade_hash(trade)
-        
-        if await self._is_duplicate(trade_hash):
+            conn = await self._pool.get_connection()
+            return await conn.ping()
+        except Exception:
             return False
             
-        stream_key = f"trades:{symbol}:{market_type}"
-        await self._pool.execute(
-            "xadd",
-            stream_key,
-            {"data": self._compress_data(trade)},
-            id=f"{trade['timestamp']}-0",
-            maxlen=redis_config.stream_maxlen,
-            approximate=True
-        )
-        
-        self._dedupe_cache[trade_hash] = time.time()
-        return True
+    # TRADE OPERATIONS
     
-    async def add_orderbook(self, symbol: str, orderbook_data: dict, market_type: str = "spot") -> bool:
-        """Speichert Orderbuch-Daten (Premium Feature)"""
+    async def add_trade(self, symbol: str, trade: dict, market_type: str) -> bool:
+        """Fügt einen Trade mit Deduplizierung hinzu"""
         try:
-            orderbook_key = f"orderbook:{symbol}:{market_type}"
+            # Deduplizierung
+            trade_hash = self._trade_hash(trade)
+            if await self._is_duplicate(trade_hash):
+                return False
+                
+            # Stream Key
+            stream_key = f"trades:{symbol}:{market_type}"
             
-            # Orderbuch mit TTL speichern
-            compressed_data = self._compress_data({
-                "symbol": symbol,
-                "market_type": market_type,
-                "data": orderbook_data,
-                "timestamp": int(time.time() * 1000)
-            })
+            # Pipeline für höheren Durchsatz
+            async with await self._pool.get_connection() as conn:
+                async with conn.pipeline(transaction=True) as pipe:
+                    pipe.xadd(
+                        stream_key,
+                        {"data": self._compress(trade)},
+                        id=f"{trade['ts']}-0",
+                        maxlen=redis_config.stream_maxlen,
+                        approximate=True
+                    )
+                    pipe.setex(
+                        f"trade_dedup:{trade_hash}",
+                        system_config.deduplication_window,
+                        "1"
+                    )
+                    await pipe.execute()
             
-            await self._pool.execute(
-                "setex", 
-                orderbook_key, 
-                redis_config.orderbook_ttl,  # 30 Sekunden TTL
-                compressed_data
-            )
-            
+            # Cache für schnellen Zugriff
+            self._dedupe_cache[trade_hash] = time.time()
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to store orderbook for {symbol}: {e}")
+            logger.error(f"❌ Trade add failed: {e}")
             return False
-        
-    def _generate_trade_hash(self, trade: dict) -> str:
-        data = f"{trade['symbol']}:{trade['market_type']}:{trade['timestamp']}:{trade['price']}:{trade['size']}"
-        return hashlib.sha256(data.encode()).hexdigest()
+            
+    async def get_recent_trades(self, symbol: str, market_type: str, limit: int) -> List[Dict]:
+        """Holt die neuesten Trades mit hoher Geschwindigkeit"""
+        try:
+            stream_key = f"trades:{symbol}:{market_type}"
+            async with await self._pool.get_connection() as conn:
+                # Holt die letzten 'limit' Einträge
+                response = await conn.xrevrange(
+                    stream_key, count=limit
+                )
+                
+                # Verarbeitung ohne unnötige Kopien
+                trades = []
+                for _, data in response:
+                    trade_data = self._decompress(data[b"data"])
+                    trades.append(trade_data)
+                    
+                return trades
+                
+        except Exception as e:
+            logger.error(f"❌ Trade fetch failed: {e}")
+            return []
+    
+    # CANDLE OPERATIONS
+    
+    async def add_candle(self, symbol: str, candle: list, market_type: str) -> bool:
+        """Fügt eine Kerze hinzu (hochoptimiert)"""
+        try:
+            key = f"candle:{symbol}:{market_type}:{candle[0]}"
+            data = {
+                "o": float(candle[1]),
+                "h": float(candle[2]),
+                "l": float(candle[3]),
+                "c": float(candle[4]),
+                "v": float(candle[5]),
+                "ts": int(candle[0])
+            }
+            await (await self._pool.get_connection()).set(
+                key, 
+                self._compress(data),
+                ex=86400  # 24 Stunden TTL
+            )
+            return True
+        except Exception as e:
+            logger.error(f"❌ Candle add failed: {e}")
+            return False
+    
+    # INTERNAL UTILS
+    
+    def _trade_hash(self, trade: dict) -> str:
+        """Erzeugt einen eindeutigen Hash für einen Trade"""
+        return hashlib.sha256(
+            f"{trade['symbol']}:{trade['ts']}:{trade['price']}:{trade['size']}".encode()
+        ).hexdigest()
         
     async def _is_duplicate(self, trade_hash: str) -> bool:
+        """Prüft auf Duplikate mit Cache-Layer"""
+        # In-Memory Cache zuerst
         if trade_hash in self._dedupe_cache:
             return True
             
-        exists = await self._pool.execute("exists", f"trade_dedup:{trade_hash}")
-        if exists:
-            return True
-            
-        await self._pool.execute(
-            "setex", 
-            f"trade_dedup:{trade_hash}", 
-            system_config.deduplication_window, 
-            "1"
-        )
+        # Redis Check
+        async with await self._pool.get_connection() as conn:
+            exists = await conn.exists(f"trade_dedup:{trade_hash}")
+            if exists:
+                return True
+                
         return False
         
-    def _compress_data(self, data: dict) -> bytes:
+    def _compress(self, data: Any) -> bytes:
+        """Kompression mit gzip (schnell und effizient)"""
         return gzip.compress(json.dumps(data).encode())
         
-    def _decompress_data(self, data: bytes) -> dict:
+    def _decompress(self, data: bytes) -> Any:
+        """Dekomprimiert gzip-komprimierte Daten"""
         return json.loads(gzip.decompress(data).decode())
+    
+    # MAINTENANCE
+    
+    async def cleanup_cache(self):
+        """Bereinigt den In-Memory Cache regelmäßig"""
+        now = time.time()
+        if now - self._last_cleanup > 300:  # Alle 5 Minuten
+            expired = [k for k, t in self._dedupe_cache.items() if now - t > 600]
+            for k in expired:
+                del self._dedupe_cache[k]
+            self._last_cleanup = now
 
+# Globaler hochleistungsfähiger Manager
 redis_manager = RedisManager()
