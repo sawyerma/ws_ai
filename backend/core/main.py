@@ -71,13 +71,13 @@ def root():
 async def on_startup():
     logger.info("Trading API gestartet & bereit!")
     
-    # Whale-System TEMPORÄR DEAKTIVIERT (wegen SpawnProcess Fehler)
-    logger.info("🐋 Whale System deaktiviert für debugging")
-    # try:
-    #     await start_whale_system()
-    #     logger.info("🐋 Whale Monitoring System gestartet!")
-    # except Exception as e:
-    #     logger.error(f"Failed to start Whale system: {e}")
+    # Whale-System aktiviert für Tests
+    logger.info("🐋 Whale System wird gestartet...")
+    try:
+        await start_whale_system()
+        logger.info("🐋 Whale Monitoring System gestartet!")
+    except Exception as e:
+        logger.error(f"Failed to start Whale system: {e}")
 
 # Shutdown-Event
 @app.on_event("shutdown")
@@ -85,8 +85,8 @@ async def on_shutdown():
     logger.info("Shutting down systems...")
     
     # Whale-System stoppen (wenn aktiviert)
-    # try:
-    #     await stop_whale_system()
-    #     logger.info("🐋 Whale Monitoring System gestoppt!")
-    # except Exception as e:
-    #     logger.error(f"Failed to stop Whale system: {e}")
+    try:
+        await stop_whale_system()
+        logger.info("🐋 Whale Monitoring System gestoppt!")
+    except Exception as e:
+        logger.error(f"Failed to stop Whale system: {e}")

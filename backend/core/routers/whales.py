@@ -45,8 +45,7 @@ async def get_recent_whale_events(
         # Fetch whale events
         events = fetch_whale_events(
             symbol=symbol,
-            limit=limit,
-            offset=offset
+            limit=limit
         )
         
         # Apply additional filters
