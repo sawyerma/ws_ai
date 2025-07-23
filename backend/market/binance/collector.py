@@ -1,11 +1,15 @@
 import asyncio
 import logging
 import json
+from datetime import datetime
 from market.binance.services.binance_client import BinanceWebSocketClient
 from market.binance.historical import HistoricalDataEngine
 from market.binance.config import SystemConfig
-from market.binance.services.aggregator import CandleAggregator
+from market.binance.storage.redis_manager import RedisManager
+from market.binance.storage.clickhouse_manager import ClickHouseManager
 from market.binance.services.auto_remediation import AutoRemediationSystem
+from backend.core.services.aggregator import UnifiedCandleAggregator
+from models.trade import UnifiedTrade, MarketType
 
 logger = logging.getLogger("binance-collector")
 
@@ -14,7 +18,7 @@ class BinanceDataCollector:
         self.config = config
         self.redis = RedisManager(config)
         self.ch = ClickHouseManager(config, self.redis)
-        self.aggregators = {res: CandleAggregator(res) for res in config.resolutions}
+        self.aggregators = {res: UnifiedCandleAggregator(res) for res in config.resolutions}
         self.ws_clients = {}
         self.historical_engines = {}
         self.remediation = AutoRemediationSystem()
@@ -88,12 +92,27 @@ class BinanceDataCollector:
 
     async def _handle_trade(self, trade: dict):
         try:
+            # Konvertiere zu UnifiedTrade
+            unified_trade = UnifiedTrade(
+                exchange="binance",
+                symbol=trade['symbol'],
+                market=MarketType.usdtm if trade.get('is_futures', False) else MarketType.spot,
+                price=trade['price'],
+                size=trade['size'],
+                side=trade['side'],
+                timestamp=trade['timestamp'],
+                exchange_id=trade['id']
+            )
+            
             await self.redis.save_trade(trade)
             await self.ch.save_trade(trade)
+            
+            # Verwende UnifiedCandleAggregator
             for aggregator in self.aggregators.values():
-                candle = aggregator.process_trade(trade)
+                candle = aggregator.process_trade(unified_trade)
                 if candle:
                     await self.ch.save_candle(candle)
+            
             logger.debug(f"Processed trade: {trade['symbol']} @ {trade['price']}")
         except Exception as e:
             logger.error(f"Error handling trade: {str(e)}")

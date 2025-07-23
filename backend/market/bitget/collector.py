@@ -1,8 +1,12 @@
 import asyncio
 import logging
+import time
+from datetime import datetime, timezone
 from market.bitget.services.bitget_client import BitgetWebSocketClient
 from market.bitget.storage.redis_manager import redis_manager
 from market.bitget.config import system_config, bitget_config
+from backend.core.services.aggregator import UnifiedCandleAggregator
+from models.trade import UnifiedTrade, MarketType
 
 logger = logging.getLogger("collector")
 
@@ -17,6 +21,13 @@ class BitgetCollector:
         self.running = False
         self.process_task = None
         
+        # UnifiedCandleAggregator für verschiedene Resolutions
+        self.aggregators = {
+            res: UnifiedCandleAggregator(res) 
+            for res in [1, 60, 300, 900]  # 1s, 1m, 5m, 15m
+        }
+        self.flush_task = None
+        
     async def start(self):
         """Startet den Collector mit maximaler Performance"""
         if self.running:
@@ -26,6 +37,9 @@ class BitgetCollector:
         
         # Starte Datenverarbeitung parallel
         self.process_task = asyncio.create_task(self._process_data())
+        
+        # Starte periodisches Candle-Flushing
+        self.flush_task = asyncio.create_task(self._periodic_flush())
         
         # WebSocket Client starten
         await self.client.start()
@@ -38,7 +52,7 @@ class BitgetCollector:
             # Hier würden normalerweise Daten aus dem WebSocket kommen
             # Für dieses Beispiel simulieren wir Daten
             await asyncio.sleep(0.1)
-            trade = {
+            trade_data = {
                 "symbol": self.symbol,
                 "market": self.market_type,
                 "price": 50000.0 + (0.1 * (id(self) % 100)),
@@ -48,16 +62,48 @@ class BitgetCollector:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
+            # Konvertiere zu UnifiedTrade
+            unified_trade = UnifiedTrade(
+                exchange="bitget",
+                symbol=trade_data["symbol"],
+                market=MarketType[self.market_type] if self.market_type in MarketType.__members__ else MarketType.spot,
+                price=trade_data["price"],
+                size=trade_data["size"],
+                side=trade_data["side"],
+                timestamp=datetime.now(timezone.utc),
+                exchange_id=str(trade_data["ts"])
+            )
+            
+            # Verwende UnifiedCandleAggregator
+            for aggregator in self.aggregators.values():
+                candle = aggregator.process_trade(unified_trade)
+                if candle:
+                    # Hier würde normalerweise in ClickHouse gespeichert werden
+                    logger.debug(f"Generated candle: {candle['resolution']}s for {self.symbol}")
+            
             # Zur Weiterverarbeitung in die Queue geben
-            await self.data_queue.put(trade)
+            await self.data_queue.put(trade_data)
             
             # In Redis speichern
             await redis_manager.add_trade(
-                trade["symbol"],
-                trade,
+                trade_data["symbol"],
+                trade_data,
                 self.market_type
             )
     
+    async def _periodic_flush(self):
+        """Flusht alle Candles regelmäßig (alle 30 Sekunden)"""
+        while self.running:
+            await asyncio.sleep(30)
+            try:
+                for aggregator in self.aggregators.values():
+                    candles = aggregator.flush_all()
+                    for candle in candles:
+                        # Hier würde normalerweise in ClickHouse gespeichert werden
+                        logger.debug(f"Flushed candle: {candle['resolution']}s for {self.symbol}")
+            except Exception as e:
+                logger.error(f"Periodic flush error: {str(e)}")
+
     async def stop(self):
         """Stoppt den Collector mit sofortiger Wirkung"""
         if not self.running:
@@ -75,6 +121,20 @@ class BitgetCollector:
                 await self.process_task
             except asyncio.CancelledError:
                 pass
+        
+        # Flush-Task beenden
+        if self.flush_task:
+            self.flush_task.cancel()
+            try:
+                await self.flush_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Finales Flushing aller Candles
+        for aggregator in self.aggregators.values():
+            candles = aggregator.flush_all()
+            for candle in candles:
+                logger.debug(f"Final flush candle: {candle['resolution']}s for {self.symbol}")
                 
         logger.info(f"🛑 Collector stopped for {self.symbol} ({self.market_type})")
     

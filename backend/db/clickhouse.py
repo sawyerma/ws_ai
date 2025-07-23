@@ -61,6 +61,7 @@ def ping() -> bool:
 
 # --- Coin Settings: Insert/Update ---
 def upsert_coin_setting(
+    exchange: str,
     symbol: str,
     market: str,
     store_live: int,
@@ -73,8 +74,9 @@ def upsert_coin_setting(
     """Insert or update coin settings with error handling"""
     try:
         client = get_client()
-        sql = """
-        INSERT INTO coin_settings
+        table = f"{exchange}_coin_settings"  # Exchange-spezifische Tabelle
+        sql = f"""
+        INSERT INTO {table}
         (symbol, market, store_live, load_history, history_until, favorite, db_resolution, chart_resolution, updated_at)
         VALUES
         (%(symbol)s, %(market)s, %(store_live)s, %(load_history)s, %(history_until)s, %(favorite)s, %(db_resolution)s, %(chart_resolution)s, now())
@@ -92,9 +94,9 @@ def upsert_coin_setting(
                 "chart_resolution": chart_resolution,
             }
         )
-        logger.info(f"Upserted coin setting: {symbol}/{market}")
+        logger.info(f"Upserted coin setting: {exchange}/{symbol}/{market}")
     except Exception as e:
-        logger.error(f"Error upserting coin setting {symbol}/{market}: {e}")
+        logger.error(f"Error upserting coin setting {exchange}/{symbol}/{market}: {e}")
         traceback.print_exc()
         raise
 
@@ -267,35 +269,44 @@ def insert_bar(
 
 # --- Bars: Lesen ---
 def fetch_bars(
+    exchange: str,
     symbol: str,
     market: str,
+    resolution: int,
+    limit: int = 1000,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    limit: int = 1000,
 ) -> List[Dict[str, Any]]:
     """Fetch bars/candles with error handling"""
     try:
         client = get_client()
-        sql = """
-        SELECT symbol, market, open, high, low, close, volume, ts
-        FROM bars
-        WHERE symbol = %(symbol)s AND market = %(market)s
+        table = f"{exchange}_bars"  # Exchange-spezifische Tabelle
+        sql = f"""
+        SELECT symbol, market, resolution, open, high, low, close, volume, trades, ts
+        FROM {table}
+        WHERE symbol = %(symbol)s AND market = %(market)s AND resolution = %(resolution)s
         """
-        params = {"symbol": symbol, "market": market}
+        params = {
+            "symbol": symbol,
+            "market": market,
+            "resolution": resolution
+        }
+        
         if start:
             sql += " AND ts >= %(start)s"
             params["start"] = start
         if end:
             sql += " AND ts <= %(end)s"
             params["end"] = end
+        
         sql += " ORDER BY ts DESC LIMIT %(limit)s"
         params["limit"] = limit
         
         result = client.query(sql, params)
         bars = [dict(zip(result.column_names, row)) for row in result.result_rows]
-        logger.info(f"Fetched {len(bars)} bars for {symbol}/{market}")
+        logger.info(f"Fetched {len(bars)} bars for {exchange}/{symbol}/{market} (resolution: {resolution}s)")
         return bars
     except Exception as e:
-        logger.error(f"Error fetching bars for {symbol}/{market}: {e}")
+        logger.error(f"Error fetching bars for {exchange}/{symbol}/{market}: {e}")
         traceback.print_exc()
         return []

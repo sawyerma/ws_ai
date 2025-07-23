@@ -223,7 +223,7 @@ export async function fetchTickers(): Promise<BackendTicker[]> {
   }
 }
 
-// Main function to get symbols with prices
+// Main function to get symbols with price
 export async function getSymbols(): Promise<ApiResponse> {
   try {
     // Fetch both symbols and tickers in parallel
