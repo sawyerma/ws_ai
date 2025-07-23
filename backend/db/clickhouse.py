@@ -66,60 +66,90 @@ def upsert_coin_setting(
     market: str,
     store_live: int,
     load_history: int,
-    history_until: Optional[str],
-    favorite: int,
-    db_resolution: int,
-    chart_resolution: str,
-):
+    history_until: Optional[str] = None,
+    favorite: int = 0,
+    db_resolutions: Optional[List[int]] = None,
+    chart_resolution: str = "1m"
+) -> bool:
     """Insert or update coin settings with error handling"""
     try:
         client = get_client()
-        table = f"{exchange}_coin_settings"  # Exchange-spezifische Tabelle
-        sql = f"""
-        INSERT INTO {table}
-        (symbol, market, store_live, load_history, history_until, favorite, db_resolution, chart_resolution, updated_at)
-        VALUES
-        (%(symbol)s, %(market)s, %(store_live)s, %(load_history)s, %(history_until)s, %(favorite)s, %(db_resolution)s, %(chart_resolution)s, now())
+        db_resolutions = db_resolutions or [60]
+        
+        sql = """
+        INSERT INTO coin_settings (
+            exchange, symbol, market, store_live, load_history,
+            history_until, favorite, db_resolutions, chart_resolution
+        ) VALUES (
+            %(exchange)s, %(symbol)s, %(market)s, %(store_live)s, %(load_history)s,
+            %(history_until)s, %(favorite)s, %(db_resolutions)s, %(chart_resolution)s
+        )
         """
         client.command(
             sql,
             {
+                "exchange": exchange,
                 "symbol": symbol,
                 "market": market,
                 "store_live": store_live,
                 "load_history": load_history,
                 "history_until": history_until,
                 "favorite": favorite,
-                "db_resolution": db_resolution,
+                "db_resolutions": db_resolutions,
                 "chart_resolution": chart_resolution,
             }
         )
         logger.info(f"Upserted coin setting: {exchange}/{symbol}/{market}")
+        return True
     except Exception as e:
         logger.error(f"Error upserting coin setting {exchange}/{symbol}/{market}: {e}")
         traceback.print_exc()
-        raise
+        return False
 
 # --- Coin Settings: Lesen ---
-def fetch_coin_settings(symbol: Optional[str] = None, market: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Fetch coin settings with error handling"""
+def fetch_coin_settings(
+    exchange: Optional[str] = None,
+    symbol: Optional[str] = None,
+    market: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Fetch coin settings with error handling and exchange filtering"""
     try:
         client = get_client()
-        sql = "SELECT symbol, market, store_live, load_history, history_until, favorite, db_resolution, chart_resolution, updated_at FROM coin_settings"
         conditions = []
         params = {}
+        
+        if exchange:
+            conditions.append("exchange = %(exchange)s")
+            params["exchange"] = exchange
         if symbol:
             conditions.append("symbol = %(symbol)s")
             params["symbol"] = symbol
         if market:
             conditions.append("market = %(market)s")
             params["market"] = market
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
-        sql += " ORDER BY symbol, market"
+            
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         
+        sql = f"""
+        SELECT 
+            exchange, symbol, market, store_live, load_history, 
+            history_until, favorite, db_resolutions, chart_resolution
+        FROM coin_settings
+        {where_clause}
+        ORDER BY exchange, symbol, market
+        """
         result = client.query(sql, params)
-        settings = [dict(zip(result.column_names, row)) for row in result.result_rows]
+        settings = [{
+            "exchange": row[0],
+            "symbol": row[1],
+            "market": row[2],
+            "store_live": bool(row[3]),
+            "load_history": bool(row[4]),
+            "history_until": row[5],
+            "favorite": bool(row[6]),
+            "db_resolutions": row[7] if row[7] else [60],
+            "chart_resolution": row[8] if row[8] else "1m"
+        } for row in result.result_rows]
         logger.info(f"Fetched {len(settings)} coin settings")
         return settings
     except Exception as e:

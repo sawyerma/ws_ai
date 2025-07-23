@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 export default function MarketTrades({
   symbol = "BTCUSDT",
   market = "spot",
+  exchange = "bitget", // New: Exchange parameter with backward compatibility
   wsBase,
   maxLength = 30
 }) {
@@ -12,7 +13,9 @@ export default function MarketTrades({
 
   useEffect(() => {
     const wsBaseUrl = wsBase || import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8100';
-    const wsUrl = `${wsBaseUrl}/ws/${symbol}/${market}/trades`;
+    
+    // New unified WebSocket URL format: /ws/{exchange}/{symbol}/{market}
+    const wsUrl = `${wsBaseUrl}/ws/${exchange}/${symbol}/${market}`;
     setWsStatus("connecting");
     const ws = new window.WebSocket(wsUrl);
     wsRef.current = ws;

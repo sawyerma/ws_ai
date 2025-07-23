@@ -71,30 +71,6 @@ function setCache<T>(key: string, data: T, ttl: number): void {
   });
 }
 
-// Fallback mock data (only used if API fails)
-const fallbackSymbols: ApiSymbol[] = [
-  {
-    symbol: "BTC/USDT",
-    market: "spot",
-    price: "104,911.62",
-    change: "-3.56%",
-    changePercent: -3.56,
-  },
-  {
-    symbol: "ETH/USDT",
-    market: "spot",
-    price: "3,252.10",
-    change: "+1.20%",
-    changePercent: 1.2,
-  },
-  {
-    symbol: "SOL/USDT",
-    market: "spot",
-    price: "134.51",
-    change: "+0.30%",
-    changePercent: 0.3,
-  },
-];
 
 // Format symbol for display (BTCUSDT -> BTC/USDT)
 function formatSymbol(symbol: string): string {
@@ -165,13 +141,18 @@ function formatChangePercent(changeRate: number): { change: string; changePercen
   };
 }
 
-// Fetch symbols from backend
-export async function fetchSymbols(): Promise<BackendSymbolsResponse> {
-  const cached = getCached<BackendSymbolsResponse>('symbols');
+// Exchange configuration
+export type Exchange = 'binance' | 'bitget';
+export const DEFAULT_EXCHANGE: Exchange = 'bitget'; // Legacy compatibility
+
+// Fetch symbols from backend with exchange support
+export async function fetchSymbols(exchange: Exchange = DEFAULT_EXCHANGE): Promise<BackendSymbolsResponse> {
+  const cacheKey = `symbols_${exchange}`;
+  const cached = getCached<BackendSymbolsResponse>(cacheKey);
   if (cached) return cached;
   
   try {
-    const response = await fetch(`${API_BASE}/symbols`, {
+    const response = await fetch(`${API_BASE}/symbols?exchange=${exchange}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -184,23 +165,53 @@ export async function fetchSymbols(): Promise<BackendSymbolsResponse> {
     }
     
     const data = await response.json();
-    setCache('symbols', data, CACHE_TTL);
+    setCache(cacheKey, data, CACHE_TTL);
     
-    console.log(`[SymbolsAPI] Fetched ${data.symbols?.length || 0} symbols from backend`);
+    console.log(`[SymbolsAPI] Fetched ${data.symbols?.length || 0} symbols from ${exchange}`);
     return data;
   } catch (error) {
-    console.error('[SymbolsAPI] Failed to fetch symbols:', error);
+    console.error(`[SymbolsAPI] Failed to fetch symbols from ${exchange}:`, error);
     throw error;
   }
 }
 
-// Fetch tickers from backend
-export async function fetchTickers(): Promise<BackendTicker[]> {
-  const cached = getCached<BackendTicker[]>('tickers');
+// Fetch symbols from all exchanges
+export async function fetchAllSymbols(): Promise<BackendSymbolsResponse> {
+  const cacheKey = 'symbols_all';
+  const cached = getCached<BackendSymbolsResponse>(cacheKey);
   if (cached) return cached;
   
   try {
-    const response = await fetch(`${API_BASE}/ticker`, {
+    const [binanceData, bitgetData] = await Promise.all([
+      fetchSymbols('binance').catch(() => ({ symbols: [], db_symbols: [] })),
+      fetchSymbols('bitget').catch(() => ({ symbols: [], db_symbols: [] }))
+    ]);
+    
+    const combinedData: BackendSymbolsResponse = {
+      symbols: [
+        ...binanceData.symbols.map(s => ({ ...s, exchange: 'binance' })), 
+        ...bitgetData.symbols.map(s => ({ ...s, exchange: 'bitget' }))
+      ],
+      db_symbols: [...binanceData.db_symbols, ...bitgetData.db_symbols]
+    };
+    
+    setCache(cacheKey, combinedData, CACHE_TTL);
+    console.log(`[SymbolsAPI] Combined ${combinedData.symbols.length} symbols from all exchanges`);
+    return combinedData;
+  } catch (error) {
+    console.error('[SymbolsAPI] Failed to fetch symbols from all exchanges:', error);
+    throw error;
+  }
+}
+
+// Fetch tickers from backend with exchange support
+export async function fetchTickers(exchange: Exchange = DEFAULT_EXCHANGE): Promise<BackendTicker[]> {
+  const cacheKey = `tickers_${exchange}`;
+  const cached = getCached<BackendTicker[]>(cacheKey);
+  if (cached) return cached;
+  
+  try {
+    const response = await fetch(`${API_BASE}/ticker?exchange=${exchange}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -213,12 +224,40 @@ export async function fetchTickers(): Promise<BackendTicker[]> {
     }
     
     const data = await response.json();
-    setCache('tickers', data, TICKER_CACHE_TTL);
+    // Handle new unified backend response format
+    const tickers = data.tickers || data; // Support both old and new format
+    setCache(cacheKey, tickers, TICKER_CACHE_TTL);
     
-    console.log(`[SymbolsAPI] Fetched ${data.length} tickers from backend`);
-    return data;
+    console.log(`[SymbolsAPI] Fetched ${tickers.length} tickers from ${exchange}`);
+    return tickers;
   } catch (error) {
-    console.error('[SymbolsAPI] Failed to fetch tickers:', error);
+    console.error(`[SymbolsAPI] Failed to fetch tickers from ${exchange}:`, error);
+    throw error;
+  }
+}
+
+// Fetch tickers from all exchanges
+export async function fetchAllTickers(): Promise<BackendTicker[]> {
+  const cacheKey = 'tickers_all';
+  const cached = getCached<BackendTicker[]>(cacheKey);
+  if (cached) return cached;
+  
+  try {
+    const [binanceTickers, bitgetTickers] = await Promise.all([
+      fetchTickers('binance').catch(() => []),
+      fetchTickers('bitget').catch(() => [])
+    ]);
+    
+    const allTickers = [
+      ...binanceTickers.map(t => ({ ...t, exchange: 'binance' })),
+      ...bitgetTickers.map(t => ({ ...t, exchange: 'bitget' }))
+    ];
+    
+    setCache(cacheKey, allTickers, TICKER_CACHE_TTL);
+    console.log(`[SymbolsAPI] Combined ${allTickers.length} tickers from all exchanges`);
+    return allTickers;
+  } catch (error) {
+    console.error('[SymbolsAPI] Failed to fetch tickers from all exchanges:', error);
     throw error;
   }
 }
@@ -274,29 +313,38 @@ export async function getSymbols(): Promise<ApiResponse> {
   } catch (error) {
     console.error('[SymbolsAPI] Error in getSymbols:', error);
     
-    // Return fallback data
-    console.warn('[SymbolsAPI] Using fallback data');
+    // No fallback data - return empty array (live data only)
     return {
-      symbols: fallbackSymbols,
+      symbols: [],
     };
   }
 }
 
 // Settings API functions
 export interface CoinSetting {
+  exchange?: string;  // New: Exchange parameter
   symbol: string;
   market: string;
   store_live: boolean;
   load_history: boolean;
   history_until?: string;
   favorite: boolean;
-  db_resolution: number;
+  db_resolutions: number[];  // Updated: Now array instead of single value
   chart_resolution: string;
 }
 
-export async function getSettings(): Promise<CoinSetting[]> {
+// Fetch settings with exchange support
+export async function getSettings(exchange?: Exchange, symbol?: string, market?: string): Promise<CoinSetting[]> {
   try {
-    const response = await fetch(`${API_BASE}/settings`, {
+    const params = new URLSearchParams();
+    if (exchange) params.append('exchange', exchange);
+    if (symbol) params.append('symbol', symbol);
+    if (market) params.append('market', market);
+    
+    const queryString = params.toString();
+    const url = `${API_BASE}/settings${queryString ? `?${queryString}` : ''}`;
+    
+    const response = await fetch(url, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -308,7 +356,7 @@ export async function getSettings(): Promise<CoinSetting[]> {
     }
     
     const data = await response.json();
-    console.log(`[SymbolsAPI] Fetched ${data.length} settings from backend`);
+    console.log(`[SymbolsAPI] Fetched ${data.length} settings from backend (exchange: ${exchange || 'all'})`);
     return data;
   } catch (error) {
     console.error('[SymbolsAPI] Failed to fetch settings:', error);
@@ -316,15 +364,43 @@ export async function getSettings(): Promise<CoinSetting[]> {
   }
 }
 
+// Get settings for all exchanges
+export async function getAllSettings(): Promise<CoinSetting[]> {
+  try {
+    const [binanceSettings, bitgetSettings] = await Promise.all([
+      getSettings('binance').catch(() => []),
+      getSettings('bitget').catch(() => [])
+    ]);
+    
+    const allSettings = [...binanceSettings, ...bitgetSettings];
+    console.log(`[SymbolsAPI] Combined ${allSettings.length} settings from all exchanges`);
+    return allSettings;
+  } catch (error) {
+    console.error('[SymbolsAPI] Failed to fetch settings from all exchanges:', error);
+    return [];
+  }
+}
+
+// Save settings with exchange support
 export async function saveSettings(settings: CoinSetting[]): Promise<boolean> {
   try {
+    // Ensure each setting has an exchange field (default to bitget for legacy compatibility)
+    const settingsWithExchange = settings.map(setting => ({
+      ...setting,
+      exchange: setting.exchange || DEFAULT_EXCHANGE,
+      // Convert single db_resolution to array for backward compatibility
+      db_resolutions: Array.isArray(setting.db_resolutions) 
+        ? setting.db_resolutions 
+        : [(setting as any).db_resolution || 60]
+    }));
+    
     const response = await fetch(`${API_BASE}/settings`, {
       method: 'PUT',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(settingsWithExchange),
     });
     
     if (!response.ok) {
@@ -338,6 +414,15 @@ export async function saveSettings(settings: CoinSetting[]): Promise<boolean> {
     console.error('[SymbolsAPI] Failed to save settings:', error);
     return false;
   }
+}
+
+// Exchange-specific settings functions
+export async function getBinanceSettings(): Promise<CoinSetting[]> {
+  return getSettings('binance');
+}
+
+export async function getBitgetSettings(): Promise<CoinSetting[]> {
+  return getSettings('bitget');
 }
 
 // Clear cache function for manual refresh

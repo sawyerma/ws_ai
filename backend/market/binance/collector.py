@@ -13,6 +13,9 @@ from models.trade import UnifiedTrade, MarketType
 
 logger = logging.getLogger("binance-collector")
 
+# Globale Collector Registry für Binance
+binance_collectors = {}
+
 class BinanceDataCollector:
     def __init__(self, config: SystemConfig):
         self.config = config

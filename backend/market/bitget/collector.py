@@ -10,6 +10,9 @@ from models.trade import UnifiedTrade, MarketType
 
 logger = logging.getLogger("collector")
 
+# Globale Collector Registry für Bitget
+bitget_collectors = {}
+
 class BitgetCollector:
     """Hochleistungs-Collector für Bitget Marktdaten"""
     
