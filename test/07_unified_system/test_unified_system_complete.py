@@ -44,7 +44,7 @@ FRONTEND_BASE_URL = "http://localhost:8180"
 REDIS_HOST = "localhost"
 REDIS_PORT = 6380
 CLICKHOUSE_HOST = "localhost"
-CLICKHOUSE_PORT = 8123
+CLICKHOUSE_PORT = 8124
 
 # Test Data
 TEST_EXCHANGES = ["binance", "bitget"]

@@ -32,7 +32,7 @@ def main():
     # 2. Requirements installieren (nur die einfachen ohne scipy)
     print("📦 Installiere Requirements (ohne problematische Pakete)...")
     pip_cmd = f"{venv_path}/bin/pip"
-    run_command(f"{pip_cmd} install requests selenium pytest httpx websockets", cwd=BASE_DIR)
+    run_command(f"{pip_cmd} install requests selenium pytest httpx websockets PySide6", cwd=BASE_DIR)
     
     # 3. Docker Services starten
     print("🚀 Starte Docker Services...")
