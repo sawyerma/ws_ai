@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Query, HTTPException
 from db.clickhouse import fetch_bars
-from backend.core.routers.exchange_factory import ExchangeFactory
+from core.routers.exchange_factory import ExchangeFactory
 from models.trade import MarketType
 from core.services.cache_service import cached, OHLC_TTL
 

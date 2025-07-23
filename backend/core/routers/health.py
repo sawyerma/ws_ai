@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter
 
 from db.clickhouse import ping
-from core.routers.trades import symbol_clients
+from core.routers.trades import exchange_clients
 # from core.routers.market_trades import trade_ws_clients  # optional
 
 # Whale-System temporär deaktiviert
@@ -28,7 +28,7 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "clickhouse": ping(),
-        "websockets_trades": sum(len(s) for s in symbol_clients.values()),
+        "websockets_trades": sum(len(clients) for exchange_clients_dict in exchange_clients.values() for clients in exchange_clients_dict.values()),
         # "websockets_markettrades": sum(len(s) for s in trade_ws_clients.values()),  # falls vorhanden
         "whale_detector": is_detector_alive(),
         "coins_active": len(fetch_coins(active=1)),

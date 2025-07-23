@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Dict, Set, Any, List
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Body, HTTPException, Query
-from backend.core.routers.exchange_factory import ExchangeFactory
+from core.routers.exchange_factory import ExchangeFactory
 from models.trade import UnifiedTrade
 
 router = APIRouter()

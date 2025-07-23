@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] %(
 logger = logging.getLogger(__name__)
 
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
-CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8123"))
+CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8124"))
 CLICKHOUSE_USER = "default"
 CLICKHOUSE_PASSWORD = ""
 CLICKHOUSE_DB = "bitget"

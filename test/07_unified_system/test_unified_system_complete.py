@@ -538,6 +538,150 @@ class UnifiedSystemTester:
         self.test_results['performance_benchmarks'] = results
         return results
     
+    async def test_symbols_token_limit_protection(self) -> Dict[str, Any]:
+        """Test Symbol API Token-Limit Schutz (max 50 Symbole)"""
+        print(f"\n{Colors.BLUE}🔒 Testing Symbols Token-Limit Protection...{Colors.END}")
+        
+        results = {}
+        
+        # Test für beide Exchanges
+        for exchange in TEST_EXCHANGES:
+            try:
+                # Standard-Aufruf ohne limit Parameter
+                url = f"{BACKEND_BASE_URL}/symbols?exchange={exchange}"
+                start_time = time.perf_counter()
+                
+                async with self.session.get(url, timeout=30) as response:
+                    duration = (time.perf_counter() - start_time) * 1000
+                    
+                    if response.status == 200:
+                        data = await response.json()
+                        symbols_count = len(data.get('symbols', []))
+                        response_size_kb = len(str(data).encode('utf-8')) / 1024
+                        
+                        # Geschätzte Token-Anzahl (ca. 1 Token = 4 Zeichen)
+                        estimated_tokens = len(str(data)) / 4
+                        
+                        # Token-Limit-Sicherheit prüfen
+                        is_safe_size = estimated_tokens < 150000  # Sicherheitsabstand zu 200k Limit
+                        is_reasonable_count = symbols_count <= 100  # Vernünftige Anzahl
+                        
+                        results[f"{exchange}_symbols"] = {
+                            'status': 'SUCCESS',
+                            'symbols_count': symbols_count,
+                            'response_size_kb': response_size_kb,
+                            'estimated_tokens': int(estimated_tokens),
+                            'is_token_safe': is_safe_size,
+                            'is_reasonable_count': is_reasonable_count,
+                            'response_time_ms': duration,
+                            'exchange': exchange
+                        }
+                        
+                        # Status-Anzeige
+                        if is_safe_size and is_reasonable_count:
+                            status_color = Colors.GREEN
+                            status_icon = "✅"
+                            status_text = "SAFE"
+                        elif is_safe_size:
+                            status_color = Colors.YELLOW
+                            status_icon = "⚠️"
+                            status_text = "ACCEPTABLE"
+                        else:
+                            status_color = Colors.RED
+                            status_icon = "❌"
+                            status_text = "UNSAFE - TOKEN LIMIT RISK"
+                        
+                        print(f"  {status_color}{status_icon}{Colors.END} {exchange.upper()}: {symbols_count} symbols, {response_size_kb:.1f}KB, ~{int(estimated_tokens):,} tokens - {status_text}")
+                        
+                        # Warnung bei kritischen Werten
+                        if estimated_tokens > 100000:
+                            print(f"    {Colors.RED}⚠️  WARNING: High token count may cause issues{Colors.END}")
+                        if response_size_kb > 500:
+                            print(f"    {Colors.RED}⚠️  WARNING: Large response size{Colors.END}")
+                            
+                    else:
+                        results[f"{exchange}_symbols"] = {
+                            'status': 'HTTP_ERROR',
+                            'http_status': response.status,
+                            'response_time_ms': duration,
+                            'exchange': exchange
+                        }
+                        print(f"  {Colors.RED}❌{Colors.END} {exchange.upper()}: HTTP {response.status}")
+                        
+            except Exception as e:
+                results[f"{exchange}_symbols"] = {
+                    'status': 'EXCEPTION',
+                    'error': str(e),
+                    'exchange': exchange
+                }
+                print(f"  {Colors.RED}❌{Colors.END} {exchange.upper()}: {e}")
+        
+        # Test mit explizitem limit Parameter (falls implementiert)
+        for exchange in TEST_EXCHANGES:
+            try:
+                url = f"{BACKEND_BASE_URL}/symbols?exchange={exchange}&limit=50"
+                async with self.session.get(url, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        limited_count = len(data.get('symbols', []))
+                        
+                        results[f"{exchange}_limited"] = {
+                            'status': 'SUCCESS',
+                            'symbols_count': limited_count,
+                            'limit_respected': limited_count <= 50,
+                            'exchange': exchange
+                        }
+                        
+                        limit_icon = "✅" if limited_count <= 50 else "⚠️"
+                        print(f"  {Colors.GREEN}{limit_icon}{Colors.END} {exchange.upper()} Limited: {limited_count} symbols (limit=50)")
+                    else:
+                        # Limit-Parameter möglicherweise nicht implementiert
+                        results[f"{exchange}_limited"] = {
+                            'status': 'LIMIT_NOT_SUPPORTED',
+                            'http_status': response.status,
+                            'exchange': exchange
+                        }
+                        print(f"  {Colors.YELLOW}📝{Colors.END} {exchange.upper()}: Limit parameter not implemented (HTTP {response.status})")
+                        
+            except Exception as e:
+                results[f"{exchange}_limited"] = {
+                    'status': 'EXCEPTION',
+                    'error': str(e),
+                    'exchange': exchange
+                }
+        
+        # Test auf problematische Binance-Response (wie in der ursprünglichen Nachricht)
+        try:
+            url = f"{BACKEND_BASE_URL}/symbols?exchange=binance"
+            async with self.session.get(url, timeout=30) as response:
+                if response.status == 200:
+                    response_text = await response.text()
+                    
+                    # Prüfe auf abgeschnittene JSON (endet nicht mit }] oder })
+                    is_truncated = not (response_text.strip().endswith('}') or response_text.strip().endswith(']}'))
+                    is_very_long = len(response_text) > 1000000  # > 1MB
+                    
+                    results['binance_truncation_check'] = {
+                        'response_length': len(response_text),
+                        'is_truncated': is_truncated,
+                        'is_very_long': is_very_long,
+                        'needs_limiting': is_truncated or is_very_long
+                    }
+                    
+                    if is_truncated:
+                        print(f"  {Colors.RED}🚨{Colors.END} BINANCE: Response truncated - NEEDS LIMITING")
+                    elif is_very_long:
+                        print(f"  {Colors.YELLOW}⚠️{Colors.END} BINANCE: Very long response ({len(response_text):,} chars)")
+                    else:
+                        print(f"  {Colors.GREEN}✅{Colors.END} BINANCE: Response size acceptable")
+                        
+        except Exception as e:
+            results['binance_truncation_check'] = {'error': str(e)}
+        
+        self.test_results['symbols_token_limit'] = results
+        print(f"{Colors.GREEN}✅ Symbols Token-Limit Protection Test completed{Colors.END}")
+        return results
+    
     def print_comprehensive_report(self):
         """Print comprehensive test report"""
         print(f"\n{Colors.CYAN}{Colors.BOLD}{'='*100}")
@@ -667,6 +811,7 @@ class TestUnifiedSystem:
             await tester.test_frontend_backend_integration()
             await tester.test_exchange_parameter_validation()
             await tester.test_performance_benchmarks()
+            await tester.test_symbols_token_limit_protection()
             
             # Generate comprehensive report
             tester.print_comprehensive_report()
