@@ -6,17 +6,54 @@ DarkMa Trading System - Concurrent WebSocket Connections Test
 Test für Multiple WebSocket Clients und Skalierbarkeit (50+ Connections).
 """
 
+# Auto-install required packages
+import subprocess
+import sys
+import os
+
+def install_required_packages():
+    """Automatically install required packages"""
+    try:
+        # Get the base directory
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        pip_path = os.path.join(base_dir, "test_venv", "bin", "pip")
+        
+        if os.path.exists(pip_path):
+            print("🔧 Installing required packages...")
+            
+            packages = ["clickhouse-connect", "docker", "psutil"]
+            for package in packages:
+                try:
+                    result = subprocess.run([pip_path, "install", package], 
+                                          capture_output=True, text=True, timeout=60)
+                    if result.returncode == 0:
+                        print(f"   ✅ {package} installed successfully")
+                    else:
+                        print(f"   ⚠️  {package} installation warning: {result.stderr.strip()}")
+                except subprocess.TimeoutExpired:
+                    print(f"   ⚠️  {package} installation timeout")
+                except Exception as e:
+                    print(f"   ⚠️  {package} installation error: {e}")
+            
+            print("🔧 Package installation completed")
+        else:
+            print(f"⚠️  Virtual environment not found at: {pip_path}")
+            
+    except Exception as e:
+        print(f"⚠️  Package installation failed: {e}")
+
+# Install packages before importing other modules
+install_required_packages()
+
 import asyncio
 import json
 import time
-import sys
 import statistics
 import websockets
 from typing import Dict, List, Optional, Tuple
 import logging
 import gc
 import psutil
-import os
 
 # Test Configuration
 BACKEND_WS_URL = "ws://localhost:8100/ws"
