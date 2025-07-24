@@ -21,7 +21,7 @@ def install_required_packages():
         if os.path.exists(pip_path):
             print("🔧 Installing required packages...")
             
-            packages = ["clickhouse-connect", "docker", "psutil"]
+            packages = ["clickhouse-connect", "docker", "psutil", "websockets"]
             for package in packages:
                 try:
                     result = subprocess.run([pip_path, "install", package], 
@@ -44,6 +44,25 @@ def install_required_packages():
 
 # Install packages before importing other modules
 install_required_packages()
+
+# Auto-restart with virtual environment if not already using it
+def ensure_virtual_env():
+    """Ensure we're running in the virtual environment"""
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    venv_python = os.path.join(base_dir, "test_venv", "bin", "python")
+    
+    # Check if we're already using the virtual environment
+    current_python = sys.executable
+    if not current_python.endswith("test_venv/bin/python"):
+        if os.path.exists(venv_python):
+            print(f"🔄 Restarting with virtual environment: {venv_python}")
+            # Re-execute this script with the virtual environment Python
+            os.execv(venv_python, [venv_python] + sys.argv)
+        else:
+            print(f"⚠️  Virtual environment not found at: {venv_python}")
+
+# Ensure virtual environment before importing other modules
+ensure_virtual_env()
 
 import asyncio
 import json
