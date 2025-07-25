@@ -925,7 +925,8 @@ class ConcurrentConnectionsTest:
         if "target_load" in self.connection_stats:
             target_data = self.connection_stats["target_load"]
             key_metrics["target_achievement"] = target_data.get("achieved", 0)
-            key_metrics["target_health"] = target_data.get("healthy_sample", 0) / target_data.get("sample_size", 1)
+            sample_size = target_data.get("sample_size", 1)
+            key_metrics["target_health"] = target_data.get("healthy_sample", 0) / max(sample_size, 1)
             key_metrics["target_ping"] = target_data.get("avg_ping_time", 0)
         
         if "maximum_capacity" in self.connection_stats:

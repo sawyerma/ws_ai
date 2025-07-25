@@ -18,6 +18,10 @@ from core.routers.trading import router as trading_router
 from core.routers.whales import router as whales_router
 from core.routers.api_settings import router as api_settings_router
 
+# WebSocket-Handler Import
+from core.ws.ws_handler import handle_websocket_connection, ws_manager
+from fastapi import WebSocket
+
 from db.clickhouse import fetch_trades, fetch_bars, fetch_coin_settings, ping
 
 # Whale-System Import
@@ -58,6 +62,11 @@ app.include_router(trading_router)
 app.include_router(whales_router)
 app.include_router(api_settings_router)
 
+# WebSocket-Endpunkt hinzufügen
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, symbol: str = "BTCUSDT"):
+    """WebSocket-Endpunkt für Live-Marktdaten"""
+    await handle_websocket_connection(websocket, symbol)
 
 # Root-Redirect auf externes Frontend (optional, oder entferne die Funktion!)
 @app.get("/", include_in_schema=False)
@@ -71,6 +80,14 @@ def root():
 async def on_startup():
     logger.info("Trading API gestartet & bereit!")
     
+    # WebSocket-Manager starten
+    logger.info("🔌 WebSocket Manager wird gestartet...")
+    try:
+        await ws_manager.start()
+        logger.info("🔌 WebSocket Manager gestartet!")
+    except Exception as e:
+        logger.error(f"Failed to start WebSocket manager: {e}")
+    
     # Whale-System aktiviert für Tests
     logger.info("🐋 Whale System wird gestartet...")
     try:
@@ -83,6 +100,13 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     logger.info("Shutting down systems...")
+    
+    # WebSocket-Manager stoppen
+    try:
+        await ws_manager.stop()
+        logger.info("🔌 WebSocket Manager gestoppt!")
+    except Exception as e:
+        logger.error(f"Failed to stop WebSocket manager: {e}")
     
     # Whale-System stoppen (wenn aktiviert)
     try:
